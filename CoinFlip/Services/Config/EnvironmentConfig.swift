@@ -35,6 +35,22 @@ enum EnvironmentConfig {
         return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6bG5sd3dybm12cWR4bnFkaWVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwNzMyMjQsImV4cCI6MjA4MzY0OTIyNH0.gO9NTdVqu3I-uHfftLJjLgiWxwpGWFN5bW3xgL86KtY"
     }()
 
+    // MARK: - Feature Flags
+
+    /// Toggle between Mock and Real data services
+    ///
+    /// - `true`: Use MockDataService (in-memory, offline, fast)
+    /// - `false`: Use SupabaseDataService (real backend, requires auth)
+    ///
+    /// Switch this to test different data sources during development.
+    static let useMockData: Bool = {
+        #if DEBUG
+        return true  // Use mock data in debug builds by default
+        #else
+        return false // Use real data in release builds
+        #endif
+    }()
+
     // MARK: - Validation
 
     /// Checks if Supabase credentials are configured
