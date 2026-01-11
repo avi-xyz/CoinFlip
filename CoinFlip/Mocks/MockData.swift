@@ -33,14 +33,16 @@ enum MockData {
     static let user = User(username: "cryptokid_2009", startingBalance: 1000, avatarEmoji: "🚀")
 
     static var portfolioWithHoldings: Portfolio {
-        var portfolio = Portfolio(startingBalance: 1000)
+        var portfolio = Portfolio(userId: user.id, startingBalance: 1000)
         _ = portfolio.buy(coin: coins[0], amount: 200)
         _ = portfolio.buy(coin: coins[2], amount: 300)
         _ = portfolio.buy(coin: coins[4], amount: 150)
         return portfolio
     }
 
-    static var emptyPortfolio: Portfolio { Portfolio(startingBalance: 1000) }
+    static var emptyPortfolio: Portfolio {
+        Portfolio(userId: user.id, startingBalance: 1000)
+    }
 
     static let leaderboard: [LeaderboardEntry] = [
         LeaderboardEntry(rank: 1, username: "whale_master", avatarEmoji: "👑", netWorth: 47832, percentageGain: 4683),

@@ -2,6 +2,7 @@ import Foundation
 
 struct Holding: Codable, Identifiable, Equatable {
     let id: UUID
+    let portfolioId: UUID
     let coinId: String
     let coinSymbol: String
     let coinName: String
@@ -9,9 +10,33 @@ struct Holding: Codable, Identifiable, Equatable {
     var quantity: Double
     var averageBuyPrice: Double
     let firstPurchaseDate: Date
+    var createdAt: Date
+    var updatedAt: Date?
 
-    init(coin: Coin, quantity: Double, buyPrice: Double) {
-        self.id = UUID()
+    // CodingKeys for snake_case database columns
+    enum CodingKeys: String, CodingKey {
+        case id
+        case portfolioId = "portfolio_id"
+        case coinId = "coin_id"
+        case coinSymbol = "coin_symbol"
+        case coinName = "coin_name"
+        case coinImage = "coin_image"
+        case quantity
+        case averageBuyPrice = "average_buy_price"
+        case firstPurchaseDate = "first_purchase_date"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    init(
+        id: UUID = UUID(),
+        portfolioId: UUID,
+        coin: Coin,
+        quantity: Double,
+        buyPrice: Double
+    ) {
+        self.id = id
+        self.portfolioId = portfolioId
         self.coinId = coin.id
         self.coinSymbol = coin.symbol
         self.coinName = coin.name
@@ -19,6 +44,8 @@ struct Holding: Codable, Identifiable, Equatable {
         self.quantity = quantity
         self.averageBuyPrice = buyPrice
         self.firstPurchaseDate = Date()
+        self.createdAt = Date()
+        self.updatedAt = nil
     }
 
     func currentValue(price: Double) -> Double { quantity * price }

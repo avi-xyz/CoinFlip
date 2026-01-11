@@ -1,14 +1,39 @@
 import Foundation
 
-struct Portfolio: Codable, Equatable {
+struct Portfolio: Codable, Equatable, Identifiable {
+    let id: UUID
+    let userId: UUID
     var cashBalance: Double
-    var holdings: [Holding]
-    var transactions: [Transaction]
     let startingBalance: Double
+    var createdAt: Date
+    var updatedAt: Date?
 
-    init(startingBalance: Double) {
+    // In-memory only (not stored in portfolios table)
+    var holdings: [Holding] = []
+    var transactions: [Transaction] = []
+
+    // CodingKeys for snake_case database columns
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case cashBalance = "cash_balance"
+        case startingBalance = "starting_balance"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        // holdings and transactions are not encoded to database
+    }
+
+    init(
+        id: UUID = UUID(),
+        userId: UUID,
+        startingBalance: Double = 1000
+    ) {
+        self.id = id
+        self.userId = userId
         self.cashBalance = startingBalance
         self.startingBalance = startingBalance
+        self.createdAt = Date()
+        self.updatedAt = nil
         self.holdings = []
         self.transactions = []
     }
@@ -40,10 +65,20 @@ struct Portfolio: Codable, Equatable {
             holdings[index].quantity += quantity
             holdings[index].averageBuyPrice = (existingCost + newCost) / holdings[index].quantity
         } else {
-            holdings.append(Holding(coin: coin, quantity: quantity, buyPrice: coin.currentPrice))
+            holdings.append(Holding(
+                portfolioId: self.id,
+                coin: coin,
+                quantity: quantity,
+                buyPrice: coin.currentPrice
+            ))
         }
 
-        let transaction = Transaction(coin: coin, type: .buy, quantity: quantity)
+        let transaction = Transaction(
+            portfolioId: self.id,
+            coin: coin,
+            type: .buy,
+            quantity: quantity
+        )
         transactions.insert(transaction, at: 0)
         return transaction
     }
@@ -60,7 +95,12 @@ struct Portfolio: Codable, Equatable {
             holdings.remove(at: index)
         }
 
-        let transaction = Transaction(coin: coin, type: .sell, quantity: quantity)
+        let transaction = Transaction(
+            portfolioId: self.id,
+            coin: coin,
+            type: .sell,
+            quantity: quantity
+        )
         transactions.insert(transaction, at: 0)
         return transaction
     }
