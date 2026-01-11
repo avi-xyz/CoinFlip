@@ -47,7 +47,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - User model has explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let user = try decoder.decode(User.self, from: response.data)
@@ -56,7 +56,7 @@ class SupabaseDataService: DataServiceProtocol {
 
     func createUser(_ user: User) async throws -> User {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Don't use convertToSnakeCase - User model has explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
         let userData = try encoder.encode(user)
@@ -69,7 +69,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - User model has explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let createdUser = try decoder.decode(User.self, from: response.data)
@@ -78,7 +78,7 @@ class SupabaseDataService: DataServiceProtocol {
 
     func updateUser(_ user: User) async throws -> User {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Don't use convertToSnakeCase - User model has explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
         let userData = try encoder.encode(user)
@@ -92,7 +92,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - User model has explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let updatedUser = try decoder.decode(User.self, from: response.data)
@@ -110,7 +110,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Portfolio model has explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         var portfolio = try decoder.decode(Portfolio.self, from: response.data)
@@ -124,7 +124,7 @@ class SupabaseDataService: DataServiceProtocol {
 
     func updatePortfolio(_ portfolio: Portfolio) async throws -> Portfolio {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Don't use convertToSnakeCase - Models have explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
         // Only encode the portfolio data, not holdings/transactions
@@ -144,7 +144,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         var updatedPortfolio = try decoder.decode(Portfolio.self, from: response.data)
@@ -158,7 +158,7 @@ class SupabaseDataService: DataServiceProtocol {
         let newPortfolio = Portfolio(userId: userId, startingBalance: startingBalance)
 
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Don't use convertToSnakeCase - Models have explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
         let portfolioData = try encoder.encode(newPortfolio)
@@ -171,7 +171,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let createdPortfolio = try decoder.decode(Portfolio.self, from: response.data)
@@ -189,7 +189,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let holdings = try decoder.decode([Holding].self, from: response.data)
@@ -198,7 +198,7 @@ class SupabaseDataService: DataServiceProtocol {
 
     func upsertHolding(_ holding: Holding) async throws -> Holding {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Don't use convertToSnakeCase - Models have explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
         let holdingData = try encoder.encode(holding)
@@ -213,7 +213,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         if existingResponse != nil {
@@ -263,7 +263,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let transactions = try decoder.decode([Transaction].self, from: response.data)
@@ -272,7 +272,7 @@ class SupabaseDataService: DataServiceProtocol {
 
     func createTransaction(_ transaction: Transaction) async throws -> Transaction {
         let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
+        // Don't use convertToSnakeCase - Models have explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
         let transactionData = try encoder.encode(transaction)
@@ -285,7 +285,7 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
 
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
         let createdTransaction = try decoder.decode(Transaction.self, from: response.data)
