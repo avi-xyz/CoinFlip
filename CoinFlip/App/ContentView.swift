@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var authService = AuthService.shared
     @StateObject private var homeViewModel: HomeViewModel
     @StateObject private var portfolioViewModel: PortfolioViewModel
     @StateObject private var leaderboardViewModel: LeaderboardViewModel
@@ -22,6 +23,21 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
+            switch authService.authState {
+            case .loading:
+                LoadingView()
+
+            case .needsUsername:
+                UsernameSetupView()
+
+            case .authenticated, .unauthenticated:
+                mainAppView
+            }
+        }
+    }
+
+    private var mainAppView: some View {
         ZStack {
             TabView {
                 HomeViewTab(viewModel: homeViewModel, portfolioViewModel: portfolioViewModel, leaderboardViewModel: leaderboardViewModel, profileViewModel: profileViewModel)
@@ -43,6 +59,7 @@ struct ContentView: View {
 
                 ProfileView()
                     .environmentObject(profileViewModel)
+                    .environmentObject(authService)
                     .tabItem {
                         Label("Profile", systemImage: "person.fill")
                     }
@@ -52,8 +69,8 @@ struct ContentView: View {
             .onAppear {
                 setupProfileCallbacks()
 
-                // Show onboarding on first launch
-                if !hasCompletedOnboarding {
+                // Show onboarding on first launch if authenticated
+                if !hasCompletedOnboarding && authService.authState.isAuthenticated {
                     showOnboarding = true
                 }
             }

@@ -45,7 +45,7 @@ enum EnvironmentConfig {
     /// Switch this to test different data sources during development.
     static let useMockData: Bool = {
         #if DEBUG
-        return true  // Use mock data in debug builds by default
+        return false  // Use real Supabase for Sprint 12 authentication testing
         #else
         return false // Use real data in release builds
         #endif

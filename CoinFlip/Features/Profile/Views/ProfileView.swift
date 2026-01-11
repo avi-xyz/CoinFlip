@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var viewModel: ProfileViewModel
     @State private var showAvatarPicker = false
+    @State private var previousAvatar: String = ""
 
     var body: some View {
         NavigationStack {
@@ -140,7 +141,9 @@ struct ProfileView: View {
                             title: "Sign Out",
                             iconColor: .lossRed
                         ) {
-                            HapticManager.shared.impact(.light)
+                            Task {
+                                await viewModel.signOut()
+                            }
                         }
                     }
                 }
@@ -151,6 +154,18 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .sheet(isPresented: $showAvatarPicker) {
                 AvatarPicker(selectedEmoji: $viewModel.avatarEmoji)
+            }
+            .onChange(of: viewModel.avatarEmoji) { oldValue, newValue in
+                // Only save if the avatar actually changed and it's not the initial load
+                if !previousAvatar.isEmpty && oldValue != newValue {
+                    Task {
+                        await viewModel.updateAvatar(newValue)
+                    }
+                }
+                previousAvatar = newValue
+            }
+            .onAppear {
+                previousAvatar = viewModel.avatarEmoji
             }
         }
     }
