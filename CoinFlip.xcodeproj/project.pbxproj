@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E1141CC22F12ED2D00E2406B /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = E1141CC12F12ED2D00E2406B /* Auth */; };
+		E1141CC42F12ED2D00E2406B /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = E1141CC32F12ED2D00E2406B /* PostgREST */; };
+		E1141CC62F12ED2D00E2406B /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = E1141CC52F12ED2D00E2406B /* Realtime */; };
+		E1141CC92F12F2B800E2406B /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = E1141CC82F12F2B800E2406B /* Supabase */; };
 		E1B4ABAE2F1177C700E145A6 /* Contents.json in Resources */ = {isa = PBXBuildFile; fileRef = E1B4ABAC2F1177C700E145A6 /* Contents.json */; };
 /* End PBXBuildFile section */
 
@@ -47,6 +51,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1141CC92F12F2B800E2406B /* Supabase in Frameworks */,
+				E1141CC62F12ED2D00E2406B /* Realtime in Frameworks */,
+				E1141CC42F12ED2D00E2406B /* PostgREST in Frameworks */,
+				E1141CC22F12ED2D00E2406B /* Auth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +75,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E1141CC72F12F2B800E2406B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		E1B4ABAD2F1177C700E145A6 /* AppIcon.appiconset */ = {
 			isa = PBXGroup;
 			children = (
@@ -81,6 +96,7 @@
 				E1F0D84F2F10924F0015C01D /* CoinFlip */,
 				E1F0D84E2F10924F0015C01D /* Products */,
 				E1B4ABAD2F1177C700E145A6 /* AppIcon.appiconset */,
+				E1141CC72F12F2B800E2406B /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -114,6 +130,10 @@
 			);
 			name = CoinFlip;
 			packageProductDependencies = (
+				E1141CC12F12ED2D00E2406B /* Auth */,
+				E1141CC32F12ED2D00E2406B /* PostgREST */,
+				E1141CC52F12ED2D00E2406B /* Realtime */,
+				E1141CC82F12F2B800E2406B /* Supabase */,
 			);
 			productName = CoinFlip;
 			productReference = E1F0D84D2F10924F0015C01D /* CoinFlip.app */;
@@ -191,6 +211,9 @@
 			);
 			mainGroup = E1F0D8442F10924F0015C01D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E1141CC02F12ED2D00E2406B /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E1F0D84E2F10924F0015C01D /* Products */;
 			projectDirPath = "";
@@ -575,6 +598,40 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E1141CC02F12ED2D00E2406B /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E1141CC12F12ED2D00E2406B /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1141CC02F12ED2D00E2406B /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		E1141CC32F12ED2D00E2406B /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1141CC02F12ED2D00E2406B /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		E1141CC52F12ED2D00E2406B /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1141CC02F12ED2D00E2406B /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		E1141CC82F12F2B800E2406B /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1141CC02F12ED2D00E2406B /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E1F0D8452F10924F0015C01D /* Project object */;
 }
