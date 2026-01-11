@@ -314,6 +314,7 @@ struct SellView: View {
 #Preview {
     SellView(
         holding: Holding(
+            portfolioId: UUID(),
             coin: MockData.coins[0],
             quantity: 1250.5,
             buyPrice: 0.08

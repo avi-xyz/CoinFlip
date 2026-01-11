@@ -87,6 +87,7 @@ struct HoldingCard: View {
     VStack {
         HoldingCard(
             holding: Holding(
+                portfolioId: UUID(),
                 coin: MockData.coins[0],
                 quantity: 1250.5,
                 buyPrice: 0.08
@@ -98,6 +99,7 @@ struct HoldingCard: View {
 
         HoldingCard(
             holding: Holding(
+                portfolioId: UUID(),
                 coin: MockData.coins[2],
                 quantity: 5000000,
                 buyPrice: 0.00002

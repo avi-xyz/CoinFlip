@@ -19,7 +19,7 @@ class HomeViewModel: ObservableObject {
     }
 
     convenience init() {
-        self.init(portfolio: Portfolio(startingBalance: 1000))
+        self.init(portfolio: Portfolio(userId: UUID(), startingBalance: 1000))
         Task { @MainActor in
             loadMockData()
         }

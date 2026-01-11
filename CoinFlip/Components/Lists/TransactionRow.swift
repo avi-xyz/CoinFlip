@@ -73,6 +73,7 @@ struct TransactionRow: View {
     VStack {
         TransactionRow(
             transaction: Transaction(
+                portfolioId: UUID(),
                 coin: MockData.coins[0],
                 type: .buy,
                 quantity: 1250.5
@@ -81,6 +82,7 @@ struct TransactionRow: View {
 
         TransactionRow(
             transaction: Transaction(
+                portfolioId: UUID(),
                 coin: MockData.coins[2],
                 type: .sell,
                 quantity: 500000
