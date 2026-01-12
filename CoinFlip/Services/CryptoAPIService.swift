@@ -226,8 +226,8 @@ private struct CoinGeckoResponse: Codable {
     let name: String
     let image: String
     let currentPrice: Double
-    let priceChange24h: Double
-    let priceChangePercentage24h: Double
+    let priceChange24h: Double?  // Can be null for some coins
+    let priceChangePercentage24h: Double?  // Can be null for some coins
     let marketCap: Double
     let sparklineIn7d: CoinGeckoSparkline?
 
@@ -250,8 +250,8 @@ private struct CoinGeckoResponse: Codable {
             name: name,
             image: URL(string: image),
             currentPrice: currentPrice,
-            priceChange24h: priceChange24h,
-            priceChangePercentage24h: priceChangePercentage24h,
+            priceChange24h: priceChange24h ?? 0.0,  // Default to 0 if null
+            priceChangePercentage24h: priceChangePercentage24h ?? 0.0,  // Default to 0 if null
             marketCap: marketCap,
             sparklineIn7d: sparklineIn7d?.toSparklineData()
         )

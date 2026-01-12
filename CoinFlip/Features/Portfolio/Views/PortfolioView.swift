@@ -10,11 +10,11 @@ struct PortfolioView: View {
                     // Portfolio Summary
                     BaseCard {
                         VStack(spacing: Spacing.md) {
-                            Text("Total Holdings")
+                            Text("Net Worth")
                                 .font(.bodyMedium)
                                 .foregroundColor(.textSecondary)
 
-                            Text(Formatters.currency(viewModel.totalHoldingsValue))
+                            Text(Formatters.currency(viewModel.portfolio.cashBalance + viewModel.totalHoldingsValue))
                                 .font(.displayMedium)
                                 .foregroundColor(.textPrimary)
                                 .contentTransition(.numericText())
@@ -30,6 +30,32 @@ struct PortfolioView: View {
                                     .font(.labelMedium)
                             }
                             .foregroundColor(viewModel.isProfit ? .gainGreen : .lossRed)
+
+                            Divider()
+                                .padding(.vertical, Spacing.xs)
+
+                            // Breakdown
+                            HStack {
+                                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                    Text("Cash")
+                                        .font(.labelMedium)
+                                        .foregroundColor(.textSecondary)
+                                    Text(Formatters.currency(viewModel.portfolio.cashBalance))
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.textPrimary)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: Spacing.xxs) {
+                                    Text("Holdings")
+                                        .font(.labelMedium)
+                                        .foregroundColor(.textSecondary)
+                                    Text(Formatters.currency(viewModel.totalHoldingsValue))
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.textPrimary)
+                                }
+                            }
                         }
                         .padding(.vertical, Spacing.sm)
                     }
@@ -65,17 +91,28 @@ struct PortfolioView: View {
                                 .padding(.horizontal, Spacing.xs)
 
                             ForEach(viewModel.holdings) { holding in
-                                if let coin = viewModel.coins.first(where: { $0.id == holding.coinId }),
-                                   let currentPrice = viewModel.currentPrices[holding.coinId] {
-                                    HoldingCard(
-                                        holding: holding,
-                                        coin: coin,
-                                        currentPrice: currentPrice,
-                                        onTap: {
-                                            viewModel.selectedHolding = holding
-                                        }
-                                    )
-                                }
+                                // Try to get real-time coin data, fallback to holding data
+                                let coin = viewModel.coins.first(where: { $0.id == holding.coinId }) ?? Coin(
+                                    id: holding.coinId,
+                                    symbol: holding.coinSymbol,
+                                    name: holding.coinName,
+                                    image: holding.coinImage,
+                                    currentPrice: holding.averageBuyPrice,
+                                    priceChange24h: 0,
+                                    priceChangePercentage24h: 0,
+                                    marketCap: 0,
+                                    sparklineIn7d: nil
+                                )
+                                let currentPrice = viewModel.currentPrices[holding.coinId] ?? holding.averageBuyPrice
+
+                                HoldingCard(
+                                    holding: holding,
+                                    coin: coin,
+                                    currentPrice: currentPrice,
+                                    onTap: {
+                                        viewModel.selectedHolding = holding
+                                    }
+                                )
                             }
                         }
 
@@ -104,17 +141,28 @@ struct PortfolioView: View {
                 viewModel.refresh()
             }
             .sheet(item: $viewModel.selectedHolding) { holding in
-                if let coin = viewModel.coins.first(where: { $0.id == holding.coinId }),
-                   let currentPrice = viewModel.currentPrices[holding.coinId] {
-                    SellView(
-                        holding: holding,
-                        coin: coin,
-                        currentPrice: currentPrice
-                    ) { quantity in
-                        viewModel.sell(holding: holding, quantity: quantity)
-                    }
-                    .presentationDetents([.large])
+                // Use real-time data if available, fallback to holding data
+                let coin = viewModel.coins.first(where: { $0.id == holding.coinId }) ?? Coin(
+                    id: holding.coinId,
+                    symbol: holding.coinSymbol,
+                    name: holding.coinName,
+                    image: holding.coinImage,
+                    currentPrice: holding.averageBuyPrice,
+                    priceChange24h: 0,
+                    priceChangePercentage24h: 0,
+                    marketCap: 0,
+                    sparklineIn7d: nil
+                )
+                let currentPrice = viewModel.currentPrices[holding.coinId] ?? holding.averageBuyPrice
+
+                SellView(
+                    holding: holding,
+                    coin: coin,
+                    currentPrice: currentPrice
+                ) { quantity in
+                    viewModel.sell(holding: holding, quantity: quantity)
                 }
+                .presentationDetents([.large])
             }
             .onAppear {
                 viewModel.loadData()

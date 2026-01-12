@@ -32,10 +32,22 @@ struct HoldingCard: View {
             BaseCard {
                 HStack(spacing: Spacing.md) {
                     // Coin Image
-                    AsyncImage(url: coin.image) { image in
-                        image.resizable().scaledToFit()
-                    } placeholder: {
-                        Circle().fill(Color.cardBackgroundElevated)
+                    AsyncImage(url: coin.image) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFit()
+                        case .failure, .empty:
+                            // Show coin symbol when image fails to load
+                            Circle()
+                                .fill(Color.cardBackgroundElevated)
+                                .overlay(
+                                    Text(String(coin.symbol.prefix(3)).uppercased())
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.textSecondary)
+                                )
+                        @unknown default:
+                            Circle().fill(Color.cardBackgroundElevated)
+                        }
                     }
                     .frame(width: 48, height: 48)
                     .clipShape(Circle())

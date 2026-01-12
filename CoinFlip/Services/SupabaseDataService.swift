@@ -214,25 +214,50 @@ class SupabaseDataService: DataServiceProtocol {
     }
 
     func updateUser(_ user: User) async throws -> User {
-        let encoder = JSONEncoder()
-        // Don't use convertToSnakeCase - User model has explicit CodingKeys
-        encoder.dateEncodingStrategy = .iso8601
+        // Only encode updatable fields (not id, auth_user_id, created_at)
+        let updateData: [String: Any] = [
+            "username": user.username,
+            "avatar_emoji": user.avatarEmoji,
+            "starting_balance": user.startingBalance,
+            "highest_net_worth": user.highestNetWorth,
+            "current_streak": user.currentStreak,
+            "best_streak": user.bestStreak,
+            "updated_at": ISO8601DateFormatter().string(from: Date())
+        ]
 
-        let userData = try encoder.encode(user)
+        let jsonData = try JSONSerialization.data(withJSONObject: updateData)
 
-        let response = try await supabase
-            .from("users")
-            .update(userData)
-            .eq("id", value: user.id.uuidString)
-            .select()
-            .single()
-            .execute()
+        // Use raw HTTP PATCH (same workaround as portfolio/holdings)
+        let session = try await supabase.auth.session
+        let supabaseURL = EnvironmentConfig.supabaseURL
+        let url = URL(string: "\(supabaseURL)/rest/v1/users?id=eq.\(user.id.uuidString.lowercased())")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = jsonData
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: request)
+        let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
+
+        if statusCode >= 400 {
+            if let responseText = String(data: data, encoding: .utf8) {
+                print("❌ User update error: \(responseText)")
+            }
+            throw DataServiceError.invalidData
+        }
 
         let decoder = JSONDecoder()
-        // Don't use convertFromSnakeCase - User model has explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
-        let updatedUser = try decoder.decode(User.self, from: response.data)
+        let users = try decoder.decode([User].self, from: data)
+        guard let updatedUser = users.first else {
+            throw DataServiceError.invalidData
+        }
+
         return updatedUser
     }
 
@@ -260,10 +285,6 @@ class SupabaseDataService: DataServiceProtocol {
     }
 
     func updatePortfolio(_ portfolio: Portfolio) async throws -> Portfolio {
-        let encoder = JSONEncoder()
-        // Don't use convertToSnakeCase - Models have explicit CodingKeys
-        encoder.dateEncodingStrategy = .iso8601
-
         // Only encode the portfolio data, not holdings/transactions
         let updateData: [String: Any] = [
             "cash_balance": portfolio.cashBalance,
@@ -272,19 +293,37 @@ class SupabaseDataService: DataServiceProtocol {
 
         let jsonData = try JSONSerialization.data(withJSONObject: updateData)
 
-        let response = try await supabase
-            .from("portfolios")
-            .update(jsonData)
-            .eq("id", value: portfolio.id.uuidString)
-            .select()
-            .single()
-            .execute()
+        // Use raw HTTP for UPDATE (same workaround as holdings)
+        let session = try await supabase.auth.session
+        let supabaseURL = EnvironmentConfig.supabaseURL
+        let url = URL(string: "\(supabaseURL)/rest/v1/portfolios?id=eq.\(portfolio.id.uuidString.lowercased())")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = jsonData
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: request)
+        let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
+
+        if statusCode >= 400 {
+            if let responseText = String(data: data, encoding: .utf8) {
+                print("❌ Portfolio update error: \(responseText)")
+            }
+            throw DataServiceError.invalidData
+        }
 
         let decoder = JSONDecoder()
-        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
-        var updatedPortfolio = try decoder.decode(Portfolio.self, from: response.data)
+        let portfolios = try decoder.decode([Portfolio].self, from: data)
+        guard var updatedPortfolio = portfolios.first else {
+            throw DataServiceError.invalidData
+        }
+
         updatedPortfolio.holdings = portfolio.holdings
         updatedPortfolio.transactions = portfolio.transactions
 
@@ -379,71 +418,111 @@ class SupabaseDataService: DataServiceProtocol {
     }
 
     func upsertHolding(_ holding: Holding) async throws -> Holding {
-        let encoder = JSONEncoder()
-        // Don't use convertToSnakeCase - Models have explicit CodingKeys
-        encoder.dateEncodingStrategy = .iso8601
-
-        let holdingData = try encoder.encode(holding)
-
-        // Check if holding exists
+        // Check if holding exists (use lowercased UUID for PostgreSQL)
+        print("🔍 Checking for existing holding: portfolio=\(holding.portfolioId.uuidString.lowercased()), coin=\(holding.coinId)")
         let existingResponse = try? await supabase
             .from("holdings")
             .select()
-            .eq("portfolio_id", value: holding.portfolioId.uuidString)
+            .eq("portfolio_id", value: holding.portfolioId.uuidString.lowercased())
             .eq("coin_id", value: holding.coinId)
-            .single()
             .execute()
 
         let decoder = JSONDecoder()
         // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
-        if existingResponse != nil {
-            // Update existing holding (UPDATE works fine with SDK)
-            let updateResponse = try await supabase
-                .from("holdings")
-                .update(holdingData)
-                .eq("portfolio_id", value: holding.portfolioId.uuidString)
-                .eq("coin_id", value: holding.coinId)
-                .select()
-                .single()
-                .execute()
+        if let responseData = existingResponse?.data,
+           let jsonString = String(data: responseData, encoding: .utf8),
+           jsonString != "[]" {
+            // Holding exists - try to UPDATE it
+            print("   ✅ Found existing holding, updating...")
 
-            let upsertedHolding = try decoder.decode(Holding.self, from: updateResponse.data)
-            return upsertedHolding
-        } else {
-            // Insert new holding (use raw HTTP to avoid SDK bug)
-            let holdingArray = try encoder.encode([holding])
+            // Create update payload with only the fields we want to update
+            // Don't include id, created_at, first_purchase_date - these shouldn't change
+            let updateData: [String: Any] = [
+                "quantity": holding.quantity,
+                "average_buy_price": holding.averageBuyPrice,
+                "coin_name": holding.coinName,
+                "coin_symbol": holding.coinSymbol,
+                "coin_image": holding.coinImage?.absoluteString ?? "",
+                "updated_at": ISO8601DateFormatter().string(from: Date())
+            ]
 
+            let updateJSON = try JSONSerialization.data(withJSONObject: updateData)
+
+            if let jsonString = String(data: updateJSON, encoding: .utf8) {
+                print("   📤 Update data: \(jsonString)")
+            }
+
+            // Use raw HTTP for UPDATE (same workaround as INSERT)
             let session = try await supabase.auth.session
             let supabaseURL = EnvironmentConfig.supabaseURL
-            let url = URL(string: "\(supabaseURL)/rest/v1/holdings")!
+            let url = URL(string: "\(supabaseURL)/rest/v1/holdings?portfolio_id=eq.\(holding.portfolioId.uuidString.lowercased())&coin_id=eq.\(holding.coinId)")!
 
             var request = URLRequest(url: url)
-            request.httpMethod = "POST"
+            request.httpMethod = "PATCH"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
             request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
             request.setValue("return=representation", forHTTPHeaderField: "Prefer")
-            request.httpBody = holdingArray
+            request.httpBody = updateJSON
 
             let (data, httpResponse) = try await URLSession.shared.data(for: request)
             let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
 
-            if statusCode >= 400 {
-                if let responseText = String(data: data, encoding: .utf8) {
-                    print("❌ Holding insert error: \(responseText)")
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("   📥 Update response (status \(statusCode)): \(jsonString)")
+            }
+
+            if statusCode == 200 || statusCode == 204 {
+                // Parse response array
+                let holdings = try decoder.decode([Holding].self, from: data)
+                print("   ✅ Decoded \(holdings.count) holdings")
+
+                if let upsertedHolding = holdings.first {
+                    return upsertedHolding  // SUCCESS
+                } else {
+                    print("   ⚠️ UPDATE returned 0 rows, will try INSERT")
                 }
-                throw DataServiceError.invalidData
+            } else if statusCode >= 400 {
+                print("   ❌ UPDATE failed with HTTP \(statusCode), will try INSERT")
             }
-
-            let holdings = try decoder.decode([Holding].self, from: data)
-            guard let upsertedHolding = holdings.first else {
-                throw DataServiceError.invalidData
-            }
-
-            return upsertedHolding
         }
+
+        // INSERT new holding (either because it doesn't exist, or UPDATE failed)
+        print("   ℹ️ Creating new holding...")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let holdingArray = try encoder.encode([holding])
+
+        let session = try await supabase.auth.session
+        let supabaseURL = EnvironmentConfig.supabaseURL
+        let url = URL(string: "\(supabaseURL)/rest/v1/holdings")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = holdingArray
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: request)
+        let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
+
+        if statusCode >= 400 {
+            if let responseText = String(data: data, encoding: .utf8) {
+                print("❌ Holding insert error: \(responseText)")
+            }
+            throw DataServiceError.invalidData
+        }
+
+        let holdings = try decoder.decode([Holding].self, from: data)
+        guard let upsertedHolding = holdings.first else {
+            throw DataServiceError.invalidData
+        }
+
+        return upsertedHolding
     }
 
     func deleteHolding(holdingId: UUID) async throws {
@@ -480,8 +559,42 @@ class SupabaseDataService: DataServiceProtocol {
         // Encode as array (Supabase expects array)
         let transactionData = try encoder.encode([transaction])
 
+        // Debug: Print transaction details
+        if let jsonString = String(data: transactionData, encoding: .utf8) {
+            print("📤 Creating transaction: \(jsonString)")
+        }
+
         // Use raw HTTP request (same workaround as createUser/createPortfolio)
         let session = try await supabase.auth.session
+        print("🔍 Auth user ID: \(session.user.id)")
+
+        // Debug: Verify portfolio ownership chain
+        do {
+            // 1. Check portfolio exists
+            let portfolioCheck = try await supabase
+                .from("portfolios")
+                .select("id, user_id")
+                .eq("id", value: transaction.portfolioId.uuidString.lowercased())
+                .execute()
+
+            if let jsonString = String(data: portfolioCheck.data, encoding: .utf8) {
+                print("🔍 Portfolio query result: \(jsonString)")
+            }
+
+            // 2. Check user exists
+            let userCheck = try await supabase
+                .from("users")
+                .select("id, auth_user_id, username")
+                .eq("auth_user_id", value: session.user.id.uuidString.lowercased())
+                .execute()
+
+            if let jsonString = String(data: userCheck.data, encoding: .utf8) {
+                print("🔍 User query result: \(jsonString)")
+            }
+        } catch {
+            print("❌ Debug queries failed: \(error)")
+        }
+
         let supabaseURL = EnvironmentConfig.supabaseURL
         let url = URL(string: "\(supabaseURL)/rest/v1/transactions")!
 

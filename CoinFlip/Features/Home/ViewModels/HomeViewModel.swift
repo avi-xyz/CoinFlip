@@ -17,6 +17,7 @@ class HomeViewModel: ObservableObject {
     private let dataService: DataServiceProtocol
     private let authService = AuthService.shared
     private let useMockData: Bool
+    private var cancellables = Set<AnyCancellable>()
 
     init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, dataService: DataServiceProtocol = SupabaseDataService.shared, useMockData: Bool = false) {
         self.portfolio = portfolio
@@ -24,6 +25,17 @@ class HomeViewModel: ObservableObject {
         self.cryptoAPI = cryptoAPI
         self.dataService = dataService
         self.useMockData = useMockData
+
+        // Observe currentUser changes and reload portfolio
+        authService.$currentUser
+            .sink { [weak self] user in
+                guard let self = self, let user = user else { return }
+                print("🔄 HomeViewModel: currentUser changed, loading portfolio...")
+                Task { @MainActor in
+                    await self.loadPortfolio()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     convenience init() {
@@ -34,7 +46,6 @@ class HomeViewModel: ObservableObject {
             useMockData: useMock
         )
         Task { @MainActor in
-            await loadPortfolio()
             await loadData()
         }
     }
@@ -50,11 +61,25 @@ class HomeViewModel: ObservableObject {
             print("🔄 HomeViewModel: Loading portfolio for user \(user.username)...")
             let fetchedPortfolio = try await dataService.fetchPortfolio(userId: user.id)
             self.portfolio = fetchedPortfolio
-            self.netWorth = fetchedPortfolio.cashBalance
             print("✅ HomeViewModel: Loaded portfolio with \(fetchedPortfolio.holdings.count) holdings, cash: $\(fetchedPortfolio.cashBalance)")
+
+            // Calculate metrics to include holdings in net worth
+            calculatePortfolioMetrics()
+            print("   💰 Net worth after calculation: $\(netWorth)")
         } catch {
             print("❌ HomeViewModel: Failed to load portfolio - \(error.localizedDescription)")
-            // Keep using the current portfolio
+
+            // Portfolio doesn't exist - create one
+            print("🔄 HomeViewModel: Creating portfolio for user \(user.username)...")
+            do {
+                let newPortfolio = try await dataService.createPortfolio(userId: user.id, startingBalance: user.startingBalance)
+                self.portfolio = newPortfolio
+                self.netWorth = newPortfolio.cashBalance
+                print("✅ HomeViewModel: Created portfolio with cash: $\(newPortfolio.cashBalance)")
+            } catch {
+                print("❌ HomeViewModel: Failed to create portfolio - \(error.localizedDescription)")
+                // Keep using the current in-memory portfolio as fallback
+            }
         }
     }
 
@@ -114,7 +139,23 @@ class HomeViewModel: ObservableObject {
     }
 
     func calculatePortfolioMetrics() {
-        netWorth = portfolio.totalValue(prices: currentPrices)
+        print("🧮 Calculating portfolio metrics...")
+        print("   💵 Cash balance: $\(portfolio.cashBalance)")
+        print("   📊 Holdings count: \(portfolio.holdings.count)")
+
+        let holdingsValue = portfolio.holdings.reduce(0) { total, holding in
+            guard let currentPrice = currentPrices[holding.coinId] else {
+                print("   ⚠️ No current price for \(holding.coinId), using avg buy price: $\(holding.averageBuyPrice)")
+                return total + (holding.quantity * holding.averageBuyPrice)
+            }
+            let value = holding.quantity * currentPrice
+            print("   📈 \(holding.coinSymbol): qty=\(holding.quantity), price=$\(currentPrice), value=$\(value), avgBuyPrice=$\(holding.averageBuyPrice)")
+            return total + value
+        }
+
+        print("   💎 Total holdings value: $\(holdingsValue)")
+        netWorth = portfolio.cashBalance + holdingsValue
+        print("   💰 Net worth: $\(netWorth)")
 
         dailyChange = portfolio.holdings.reduce(0) { total, holding in
             guard let currentPrice = currentPrices[holding.coinId] else { return total }
@@ -128,6 +169,8 @@ class HomeViewModel: ObservableObject {
         } else {
             dailyChangePercentage = 0
         }
+
+        print("   📊 Daily change: $\(dailyChange) (\(dailyChangePercentage)%)")
     }
 
     func buy(coin: Coin, amount: Double) -> Bool {
@@ -162,17 +205,22 @@ class HomeViewModel: ObservableObject {
 
             // 2. Update or create holding
             if let holding = updatedPortfolio.holdings.first(where: { $0.coinId == transaction.coinId }) {
+                print("   🔄 Upserting holding: \(holding.coinId), qty: \(holding.quantity), avg price: \(holding.averageBuyPrice)")
                 _ = try await dataService.upsertHolding(holding)
                 print("   ✅ Holding updated: \(holding.coinId)")
+            } else {
+                print("   ⚠️ No holding found for \(transaction.coinId)")
             }
 
             // 3. Update portfolio cash balance
+            print("   🔄 Updating portfolio cash balance to $\(updatedPortfolio.cashBalance)")
             _ = try await dataService.updatePortfolio(updatedPortfolio)
             print("   ✅ Portfolio updated: cash balance = $\(updatedPortfolio.cashBalance)")
 
             print("✅ HomeViewModel: Transaction persisted successfully")
         } catch {
             print("❌ HomeViewModel: Failed to persist transaction - \(error.localizedDescription)")
+            print("   Error details: \(error)")
             // TODO: Could implement retry logic or show error to user
         }
     }
