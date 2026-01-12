@@ -158,6 +158,15 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .sheet(isPresented: $showAvatarPicker) {
                 AvatarPicker(selectedEmoji: $viewModel.avatarEmoji)
+                    .onDisappear {
+                        // Save avatar when sheet closes, only if it changed
+                        if previousAvatar != viewModel.avatarEmoji {
+                            Task {
+                                await viewModel.updateAvatar(viewModel.avatarEmoji)
+                            }
+                            previousAvatar = viewModel.avatarEmoji
+                        }
+                    }
             }
             .sheet(isPresented: $showUsernameEditor) {
                 EditUsernameView(viewModel: viewModel)
@@ -167,15 +176,6 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showThemeSettings) {
                 ThemeSettingsView()
-            }
-            .onChange(of: viewModel.avatarEmoji) { oldValue, newValue in
-                // Only save if the avatar actually changed and it's not the initial load
-                if !previousAvatar.isEmpty && oldValue != newValue {
-                    Task {
-                        await viewModel.updateAvatar(newValue)
-                    }
-                }
-                previousAvatar = newValue
             }
             .onAppear {
                 previousAvatar = viewModel.avatarEmoji

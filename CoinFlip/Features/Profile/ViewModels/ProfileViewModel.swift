@@ -63,13 +63,12 @@ class ProfileViewModel: ObservableObject {
     func updateAvatar(_ emoji: String) async {
         guard var user = authService.currentUser else { return }
 
-        // Update local state immediately for UI responsiveness
-        self.avatarEmoji = emoji
-
-        // Save to backend
+        // Save to backend first
         user.avatarEmoji = emoji
         do {
             try await authService.updateUser(user)
+            // Only update local state after successful backend update
+            self.avatarEmoji = emoji
             HapticManager.shared.success()
         } catch {
             print("❌ Error updating avatar: \(error)")
