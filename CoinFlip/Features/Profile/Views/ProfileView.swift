@@ -18,36 +18,16 @@ struct ProfileView: View {
                         avatarEmoji: viewModel.avatarEmoji,
                         netWorth: viewModel.netWorth,
                         rank: viewModel.rank,
-                        totalGainPercentage: viewModel.totalGainPercentage
-                    )
-
-                    // Account Settings
-                    VStack(alignment: .leading, spacing: Spacing.sm) {
-                        Text("Account")
-                            .font(.headline3)
-                            .foregroundColor(.textPrimary)
-                            .padding(.horizontal, Spacing.xs)
-
-                        SettingsRow(
-                            icon: "person.circle.fill",
-                            title: "Edit Avatar",
-                            subtitle: "Tap to change your avatar",
-                            iconColor: .primaryGreen
-                        ) {
+                        totalGainPercentage: viewModel.totalGainPercentage,
+                        onAvatarTap: {
                             showAvatarPicker = true
                             HapticManager.shared.impact(.light)
-                        }
-
-                        SettingsRow(
-                            icon: "pencil.circle.fill",
-                            title: "Change Username",
-                            value: viewModel.username,
-                            iconColor: .primaryPurple
-                        ) {
+                        },
+                        onUsernameTap: {
                             showUsernameEditor = true
                             HapticManager.shared.impact(.light)
                         }
-                    }
+                    )
 
                     // App Settings
                     VStack(alignment: .leading, spacing: Spacing.sm) {

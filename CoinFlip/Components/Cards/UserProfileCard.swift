@@ -6,21 +6,57 @@ struct UserProfileCard: View {
     let netWorth: Double
     let rank: Int
     let totalGainPercentage: Double
+    var onAvatarTap: (() -> Void)?
+    var onUsernameTap: (() -> Void)?
 
     var body: some View {
         BaseCard {
             VStack(spacing: Spacing.md) {
-                // Avatar
-                Text(avatarEmoji)
-                    .font(.system(size: 64))
-                    .frame(width: 96, height: 96)
-                    .background(Color.cardBackgroundElevated)
-                    .clipShape(Circle())
+                // Avatar with edit indicator
+                Button(action: {
+                    onAvatarTap?()
+                }) {
+                    ZStack(alignment: .bottomTrailing) {
+                        Text(avatarEmoji)
+                            .font(.system(size: 64))
+                            .frame(width: 96, height: 96)
+                            .background(Color.cardBackgroundElevated)
+                            .clipShape(Circle())
 
-                // Username
-                Text(username)
-                    .font(.headline1)
-                    .foregroundColor(.textPrimary)
+                        // Edit indicator
+                        if onAvatarTap != nil {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.primaryGreen)
+                                .background(
+                                    Circle()
+                                        .fill(Color.cardBackground)
+                                        .frame(width: 24, height: 24)
+                                )
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(onAvatarTap == nil)
+
+                // Username with edit indicator
+                Button(action: {
+                    onUsernameTap?()
+                }) {
+                    HStack(spacing: Spacing.xs) {
+                        Text(username)
+                            .font(.headline1)
+                            .foregroundColor(.textPrimary)
+
+                        if onUsernameTap != nil {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 14))
+                                .foregroundColor(.textSecondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(onUsernameTap == nil)
 
                 // Stats Row
                 HStack(spacing: Spacing.xl) {
