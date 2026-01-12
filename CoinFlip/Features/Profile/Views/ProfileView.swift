@@ -3,6 +3,9 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var viewModel: ProfileViewModel
     @State private var showAvatarPicker = false
+    @State private var showUsernameEditor = false
+    @State private var showNotificationSettings = false
+    @State private var showThemeSettings = false
     @State private var previousAvatar: String = ""
 
     var body: some View {
@@ -41,6 +44,7 @@ struct ProfileView: View {
                             value: viewModel.username,
                             iconColor: .primaryPurple
                         ) {
+                            showUsernameEditor = true
                             HapticManager.shared.impact(.light)
                         }
                     }
@@ -55,18 +59,18 @@ struct ProfileView: View {
                         SettingsRow(
                             icon: "bell.fill",
                             title: "Notifications",
-                            value: "On",
                             iconColor: .primaryGreen
                         ) {
+                            showNotificationSettings = true
                             HapticManager.shared.impact(.light)
                         }
 
                         SettingsRow(
                             icon: "moon.fill",
-                            title: "Dark Mode",
-                            value: "Always",
+                            title: "Theme",
                             iconColor: .primaryPurple
                         ) {
+                            showThemeSettings = true
                             HapticManager.shared.impact(.light)
                         }
 
@@ -154,6 +158,15 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .sheet(isPresented: $showAvatarPicker) {
                 AvatarPicker(selectedEmoji: $viewModel.avatarEmoji)
+            }
+            .sheet(isPresented: $showUsernameEditor) {
+                EditUsernameView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showNotificationSettings) {
+                NotificationSettingsView()
+            }
+            .sheet(isPresented: $showThemeSettings) {
+                ThemeSettingsView()
             }
             .onChange(of: viewModel.avatarEmoji) { oldValue, newValue in
                 // Only save if the avatar actually changed and it's not the initial load

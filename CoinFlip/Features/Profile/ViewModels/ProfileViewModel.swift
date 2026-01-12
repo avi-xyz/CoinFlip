@@ -76,4 +76,43 @@ class ProfileViewModel: ObservableObject {
             HapticManager.shared.error()
         }
     }
+
+    func updateUsername(_ newUsername: String) async throws {
+        guard var user = authService.currentUser else {
+            throw ProfileError.noUser
+        }
+
+        // Validate username
+        guard !newUsername.isEmpty, newUsername.count >= 3, newUsername.count <= 20 else {
+            throw ProfileError.invalidUsername
+        }
+
+        // Update local state immediately for UI responsiveness
+        self.username = newUsername
+
+        // Save to backend
+        user.username = newUsername
+        do {
+            try await authService.updateUser(user)
+            HapticManager.shared.success()
+        } catch {
+            // Revert local state on error
+            self.username = authService.currentUser?.username ?? "You"
+            throw error
+        }
+    }
+}
+
+enum ProfileError: LocalizedError {
+    case noUser
+    case invalidUsername
+
+    var errorDescription: String? {
+        switch self {
+        case .noUser:
+            return "User not logged in"
+        case .invalidUsername:
+            return "Username must be between 3 and 20 characters"
+        }
+    }
 }

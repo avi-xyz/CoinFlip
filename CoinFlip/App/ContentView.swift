@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var authService = AuthService.shared
+    @StateObject private var themeService = ThemeService.shared
     @StateObject private var homeViewModel: HomeViewModel
     @StateObject private var portfolioViewModel: PortfolioViewModel
     @StateObject private var leaderboardViewModel: LeaderboardViewModel
@@ -73,7 +74,7 @@ struct ContentView: View {
                         Label("Profile", systemImage: "person.fill")
                     }
             }
-            .preferredColorScheme(.dark)
+            .preferredColorScheme(themeService.currentTheme.colorScheme)
             .accentColor(.primaryGreen)
             .onAppear {
                 setupProfileCallbacks()
