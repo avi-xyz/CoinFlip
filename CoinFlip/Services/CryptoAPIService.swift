@@ -94,9 +94,34 @@ class CryptoAPIService {
 
         // Parse response
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // Don't use convertFromSnakeCase - we have explicit CodingKeys
 
-        let coinGeckoCoins = try decoder.decode([CoinGeckoResponse].self, from: data)
+        // Debug: Print raw response
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("   📄 Raw JSON (first 500 chars): \(String(jsonString.prefix(500)))")
+        }
+
+        let coinGeckoCoins: [CoinGeckoResponse]
+        do {
+            coinGeckoCoins = try decoder.decode([CoinGeckoResponse].self, from: data)
+        } catch {
+            print("   ❌ Decoding error: \(error)")
+            if let decodingError = error as? DecodingError {
+                switch decodingError {
+                case .keyNotFound(let key, let context):
+                    print("   ❌ Key '\(key.stringValue)' not found: \(context.debugDescription)")
+                case .typeMismatch(let type, let context):
+                    print("   ❌ Type '\(type)' mismatch: \(context.debugDescription)")
+                case .valueNotFound(let type, let context):
+                    print("   ❌ Value '\(type)' not found: \(context.debugDescription)")
+                case .dataCorrupted(let context):
+                    print("   ❌ Data corrupted: \(context.debugDescription)")
+                @unknown default:
+                    print("   ❌ Unknown decoding error")
+                }
+            }
+            throw error
+        }
 
         // Convert to our Coin model
         let coins = coinGeckoCoins.map { $0.toCoin() }
@@ -205,6 +230,18 @@ private struct CoinGeckoResponse: Codable {
     let priceChangePercentage24h: Double
     let marketCap: Double
     let sparklineIn7d: CoinGeckoSparkline?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case symbol
+        case name
+        case image
+        case currentPrice = "current_price"
+        case priceChange24h = "price_change_24h"
+        case priceChangePercentage24h = "price_change_percentage_24h"
+        case marketCap = "market_cap"
+        case sparklineIn7d = "sparkline_in_7d"
+    }
 
     func toCoin() -> Coin {
         Coin(
