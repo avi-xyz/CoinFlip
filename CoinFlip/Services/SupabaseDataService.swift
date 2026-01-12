@@ -130,7 +130,22 @@ class SupabaseDataService: DataServiceProtocol {
                 }
 
                 if statusCode >= 400 {
-                    print("❌ HTTP error status code!")
+                    print("❌ HTTP Error! Status: \(statusCode)")
+
+                    if let responseText = String(data: data, encoding: .utf8) {
+                        print("   - Error details: \(responseText)")
+
+                        // Check for duplicate username (PostgreSQL error code 23505)
+                        if responseText.contains("23505") ||
+                           (responseText.contains("username") && responseText.contains("unique")) {
+                            print("❌ Detected duplicate username constraint violation")
+                            throw NSError(domain: "SupabaseDataService", code: 409, userInfo: [
+                                NSLocalizedDescriptionKey: "This username is already taken. Please choose another one."
+                            ])
+                        }
+                    }
+
+                    print("❌ Throwing generic invalidData error")
                     throw DataServiceError.invalidData
                 }
             } catch let error as NSError {
@@ -306,15 +321,21 @@ class SupabaseDataService: DataServiceProtocol {
         }
 
         if statusCode >= 400 {
-            // Check for duplicate username (unique constraint violation)
-            if let responseText = String(data: data, encoding: .utf8),
-               responseText.contains("username") && (responseText.contains("unique") || responseText.contains("duplicate")) {
-                print("❌ Duplicate username error")
-                throw NSError(domain: "SupabaseDataService", code: 409, userInfo: [
-                    NSLocalizedDescriptionKey: "This username is already taken. Please choose another one."
-                ])
+            print("❌ HTTP Error Status: \(statusCode)")
+
+            if let responseText = String(data: data, encoding: .utf8) {
+                print("❌ Error response: \(responseText)")
+
+                // Check for duplicate username (unique constraint violation)
+                if responseText.contains("username") && (responseText.contains("unique") || responseText.contains("duplicate")) {
+                    print("❌ Detected duplicate username error")
+                    throw NSError(domain: "SupabaseDataService", code: 409, userInfo: [
+                        NSLocalizedDescriptionKey: "This username is already taken. Please choose another one."
+                    ])
+                }
             }
 
+            print("❌ Throwing generic invalidData error")
             throw DataServiceError.invalidData
         }
 
