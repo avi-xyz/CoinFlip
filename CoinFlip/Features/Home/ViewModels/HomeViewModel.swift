@@ -13,20 +13,64 @@ class HomeViewModel: ObservableObject {
     @Published var dailyChange: Double = 0
     @Published var dailyChangePercentage: Double = 0
 
-    init(portfolio: Portfolio) {
+    private let cryptoAPI: CryptoAPIService
+    private let useMockData: Bool
+
+    init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, useMockData: Bool = false) {
         self.portfolio = portfolio
         self.netWorth = portfolio.cashBalance
+        self.cryptoAPI = cryptoAPI
+        self.useMockData = useMockData
     }
 
     convenience init() {
-        self.init(portfolio: Portfolio(userId: UUID(), startingBalance: 1000))
+        // Use mock data if configured in EnvironmentConfig
+        let useMock = EnvironmentConfig.useMockData
+        self.init(
+            portfolio: Portfolio(userId: UUID(), startingBalance: 1000),
+            useMockData: useMock
+        )
         Task { @MainActor in
-            loadMockData()
+            await loadData()
         }
     }
 
-    func loadMockData() {
+    /// Load cryptocurrency data (real or mock based on config)
+    func loadData() async {
         isLoading = true
+        error = nil
+
+        if useMockData {
+            // Use mock data for offline development
+            loadMockData()
+            return
+        }
+
+        do {
+            // Fetch real data from CoinGecko
+            print("🔄 HomeViewModel: Fetching real crypto data...")
+            let coins = try await cryptoAPI.fetchTrendingCoins(limit: 20)
+
+            self.trendingCoins = coins
+            self.featuredCoin = coins.first
+            updatePrices()
+            calculatePortfolioMetrics()
+
+            print("✅ HomeViewModel: Loaded \(coins.count) coins")
+        } catch {
+            print("❌ HomeViewModel: Failed to load coins - \(error.localizedDescription)")
+            self.error = error.localizedDescription
+
+            // Fallback to mock data if API fails
+            print("⚠️ HomeViewModel: Falling back to mock data")
+            loadMockData()
+        }
+
+        isLoading = false
+    }
+
+    /// Load mock data (for offline development or API failure fallback)
+    private func loadMockData() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.featuredCoin = MockData.featuredCoin
             self?.trendingCoins = MockData.coins
@@ -36,7 +80,10 @@ class HomeViewModel: ObservableObject {
         }
     }
 
-    func refresh() { loadMockData() }
+    /// Refresh data (force refresh from API)
+    func refresh() async {
+        await loadData()
+    }
 
     private func updatePrices() {
         for coin in trendingCoins { currentPrices[coin.id] = coin.currentPrice }

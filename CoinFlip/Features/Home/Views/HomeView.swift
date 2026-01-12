@@ -44,7 +44,9 @@ struct HomeView: View {
                 .padding(.bottom, Spacing.xxl)
             }
             .background(Color.appBackground)
-            .refreshable { viewModel.refresh() }
+            .refreshable {
+                await viewModel.refresh()
+            }
             .sheet(item: $selectedCoin) { coin in
                 BuyView(
                     coin: coin,
@@ -55,7 +57,11 @@ struct HomeView: View {
                 .presentationDetents([.large])
             }
             .onAppear {
-                viewModel.loadMockData()
+                // Initial load happens in init()
+                // Refresh manually if needed
+                Task {
+                    await viewModel.loadData()
+                }
             }
         }
     }
