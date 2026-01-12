@@ -16,6 +16,10 @@ import Supabase
 @MainActor
 class SupabaseDataService: DataServiceProtocol {
 
+    // MARK: - Shared Instance
+
+    static let shared = SupabaseDataService()
+
     // MARK: - Properties
 
     private let supabase: SupabaseClient

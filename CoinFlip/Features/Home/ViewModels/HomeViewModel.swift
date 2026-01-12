@@ -14,12 +14,15 @@ class HomeViewModel: ObservableObject {
     @Published var dailyChangePercentage: Double = 0
 
     private let cryptoAPI: CryptoAPIService
+    private let dataService: DataServiceProtocol
+    private let authService = AuthService.shared
     private let useMockData: Bool
 
-    init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, useMockData: Bool = false) {
+    init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, dataService: DataServiceProtocol = SupabaseDataService.shared, useMockData: Bool = false) {
         self.portfolio = portfolio
         self.netWorth = portfolio.cashBalance
         self.cryptoAPI = cryptoAPI
+        self.dataService = dataService
         self.useMockData = useMockData
     }
 
@@ -31,7 +34,27 @@ class HomeViewModel: ObservableObject {
             useMockData: useMock
         )
         Task { @MainActor in
+            await loadPortfolio()
             await loadData()
+        }
+    }
+
+    /// Load user's portfolio from Supabase
+    func loadPortfolio() async {
+        guard let user = authService.currentUser else {
+            print("⚠️ HomeViewModel: No currentUser, using default portfolio")
+            return
+        }
+
+        do {
+            print("🔄 HomeViewModel: Loading portfolio for user \(user.username)...")
+            let fetchedPortfolio = try await dataService.fetchPortfolio(userId: user.id)
+            self.portfolio = fetchedPortfolio
+            self.netWorth = fetchedPortfolio.cashBalance
+            print("✅ HomeViewModel: Loaded portfolio with \(fetchedPortfolio.holdings.count) holdings, cash: $\(fetchedPortfolio.cashBalance)")
+        } catch {
+            print("❌ HomeViewModel: Failed to load portfolio - \(error.localizedDescription)")
+            // Keep using the current portfolio
         }
     }
 
@@ -80,8 +103,9 @@ class HomeViewModel: ObservableObject {
         }
     }
 
-    /// Refresh data (force refresh from API)
+    /// Refresh data (force refresh from API and reload portfolio)
     func refresh() async {
+        await loadPortfolio()
         await loadData()
     }
 
@@ -108,11 +132,48 @@ class HomeViewModel: ObservableObject {
 
     func buy(coin: Coin, amount: Double) -> Bool {
         var updatedPortfolio = portfolio
-        guard updatedPortfolio.buy(coin: coin, amount: amount) != nil else { return false }
+        guard let transaction = updatedPortfolio.buy(coin: coin, amount: amount) else {
+            print("❌ HomeViewModel: Buy failed - insufficient funds or invalid amount")
+            return false
+        }
+
+        // Update local state first
         portfolio = updatedPortfolio
         currentPrices[coin.id] = coin.currentPrice
         calculatePortfolioMetrics()
+
+        // Persist to Supabase in background
+        Task {
+            await persistBuyTransaction(transaction: transaction, updatedPortfolio: updatedPortfolio)
+        }
+
         HapticManager.shared.success()
         return true
+    }
+
+    /// Persist buy transaction to Supabase
+    private func persistBuyTransaction(transaction: Transaction, updatedPortfolio: Portfolio) async {
+        do {
+            print("💾 HomeViewModel: Persisting transaction to Supabase...")
+
+            // 1. Create transaction
+            _ = try await dataService.createTransaction(transaction)
+            print("   ✅ Transaction created: \(transaction.coinId) x \(transaction.quantity)")
+
+            // 2. Update or create holding
+            if let holding = updatedPortfolio.holdings.first(where: { $0.coinId == transaction.coinId }) {
+                _ = try await dataService.upsertHolding(holding)
+                print("   ✅ Holding updated: \(holding.coinId)")
+            }
+
+            // 3. Update portfolio cash balance
+            _ = try await dataService.updatePortfolio(updatedPortfolio)
+            print("   ✅ Portfolio updated: cash balance = $\(updatedPortfolio.cashBalance)")
+
+            print("✅ HomeViewModel: Transaction persisted successfully")
+        } catch {
+            print("❌ HomeViewModel: Failed to persist transaction - \(error.localizedDescription)")
+            // TODO: Could implement retry logic or show error to user
+        }
     }
 }
