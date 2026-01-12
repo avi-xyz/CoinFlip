@@ -399,7 +399,7 @@ class SupabaseDataService: DataServiceProtocol {
         decoder.dateDecodingStrategy = .iso8601
 
         if existingResponse != nil {
-            // Update existing holding
+            // Update existing holding (UPDATE works fine with SDK)
             let updateResponse = try await supabase
                 .from("holdings")
                 .update(holdingData)
@@ -412,15 +412,36 @@ class SupabaseDataService: DataServiceProtocol {
             let upsertedHolding = try decoder.decode(Holding.self, from: updateResponse.data)
             return upsertedHolding
         } else {
-            // Insert new holding
-            let insertResponse = try await supabase
-                .from("holdings")
-                .insert(holdingData)
-                .select()
-                .single()
-                .execute()
+            // Insert new holding (use raw HTTP to avoid SDK bug)
+            let holdingArray = try encoder.encode([holding])
 
-            let upsertedHolding = try decoder.decode(Holding.self, from: insertResponse.data)
+            let session = try await supabase.auth.session
+            let supabaseURL = EnvironmentConfig.supabaseURL
+            let url = URL(string: "\(supabaseURL)/rest/v1/holdings")!
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+            request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+            request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+            request.httpBody = holdingArray
+
+            let (data, httpResponse) = try await URLSession.shared.data(for: request)
+            let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
+
+            if statusCode >= 400 {
+                if let responseText = String(data: data, encoding: .utf8) {
+                    print("❌ Holding insert error: \(responseText)")
+                }
+                throw DataServiceError.invalidData
+            }
+
+            let holdings = try decoder.decode([Holding].self, from: data)
+            guard let upsertedHolding = holdings.first else {
+                throw DataServiceError.invalidData
+            }
+
             return upsertedHolding
         }
     }
@@ -454,23 +475,43 @@ class SupabaseDataService: DataServiceProtocol {
 
     func createTransaction(_ transaction: Transaction) async throws -> Transaction {
         let encoder = JSONEncoder()
-        // Don't use convertToSnakeCase - Models have explicit CodingKeys
         encoder.dateEncodingStrategy = .iso8601
 
-        let transactionData = try encoder.encode(transaction)
+        // Encode as array (Supabase expects array)
+        let transactionData = try encoder.encode([transaction])
 
-        let response = try await supabase
-            .from("transactions")
-            .insert(transactionData)
-            .select()
-            .single()
-            .execute()
+        // Use raw HTTP request (same workaround as createUser/createPortfolio)
+        let session = try await supabase.auth.session
+        let supabaseURL = EnvironmentConfig.supabaseURL
+        let url = URL(string: "\(supabaseURL)/rest/v1/transactions")!
 
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("return=representation", forHTTPHeaderField: "Prefer")
+        request.httpBody = transactionData
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: request)
+        let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
+
+        if statusCode >= 400 {
+            if let responseText = String(data: data, encoding: .utf8) {
+                print("❌ Transaction insert error: \(responseText)")
+            }
+            throw DataServiceError.invalidData
+        }
+
+        // Decode response (should be array)
         let decoder = JSONDecoder()
-        // Don't use convertFromSnakeCase - Models have explicit CodingKeys
         decoder.dateDecodingStrategy = .iso8601
 
-        let createdTransaction = try decoder.decode(Transaction.self, from: response.data)
+        let transactions = try decoder.decode([Transaction].self, from: data)
+        guard let createdTransaction = transactions.first else {
+            throw DataServiceError.invalidData
+        }
+
         return createdTransaction
     }
 
