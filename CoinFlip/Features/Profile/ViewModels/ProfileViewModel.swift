@@ -87,19 +87,13 @@ class ProfileViewModel: ObservableObject {
             throw ProfileError.invalidUsername
         }
 
-        // Update local state immediately for UI responsiveness
-        self.username = newUsername
-
-        // Save to backend
+        // Save to backend first
         user.username = newUsername
-        do {
-            try await authService.updateUser(user)
-            HapticManager.shared.success()
-        } catch {
-            // Revert local state on error
-            self.username = authService.currentUser?.username ?? "You"
-            throw error
-        }
+        try await authService.updateUser(user)
+
+        // Only update local state after successful backend update
+        self.username = newUsername
+        HapticManager.shared.success()
     }
 }
 
