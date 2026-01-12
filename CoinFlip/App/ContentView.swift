@@ -31,8 +31,17 @@ struct ContentView: View {
             case .needsUsername:
                 UsernameSetupView()
 
-            case .authenticated, .unauthenticated:
+            case .authenticated:
                 mainAppView
+
+            case .unauthenticated:
+                LoadingView()
+                    .onAppear {
+                        // Auto sign in anonymously when unauthenticated
+                        Task {
+                            try? await authService.signInAnonymously()
+                        }
+                    }
             }
         }
     }

@@ -306,6 +306,15 @@ class SupabaseDataService: DataServiceProtocol {
         }
 
         if statusCode >= 400 {
+            // Check for duplicate username (unique constraint violation)
+            if let responseText = String(data: data, encoding: .utf8),
+               responseText.contains("username") && (responseText.contains("unique") || responseText.contains("duplicate")) {
+                print("❌ Duplicate username error")
+                throw NSError(domain: "SupabaseDataService", code: 409, userInfo: [
+                    NSLocalizedDescriptionKey: "This username is already taken. Please choose another one."
+                ])
+            }
+
             throw DataServiceError.invalidData
         }
 

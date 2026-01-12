@@ -138,6 +138,9 @@ class AuthService: ObservableObject {
             self.authState = .authenticated(userId: userId)
 
             print("✅ AuthService: User profile created successfully")
+            print("   - Username: \(createdUser.username)")
+            print("   - Avatar: \(createdUser.avatarEmoji)")
+            print("   - currentUser is now set: \(self.currentUser != nil)")
 
         } catch {
             print("❌ AuthService: Failed to create user profile - \(error.localizedDescription)")
@@ -197,6 +200,8 @@ class AuthService: ObservableObject {
                 self.currentUser = user
                 self.authState = .authenticated(userId: authUserId)
                 print("✅ AuthService: User profile found - \(user.username)")
+                print("   - Avatar: \(user.avatarEmoji)")
+                print("   - currentUser is now set: \(self.currentUser != nil)")
             } else {
                 // User authenticated but no profile (needs username)
                 self.authState = .needsUsername(userId: authUserId)

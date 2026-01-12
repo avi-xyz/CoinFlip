@@ -14,20 +14,27 @@ class ProfileViewModel: ObservableObject {
     var onResetPortfolio: (() -> Void)?
 
     init() {
+        print("🔧 ProfileViewModel: Initializing...")
+
         // Load user data from AuthService
         loadUserData()
 
         // Observe changes to currentUser
         authService.$currentUser
             .sink { [weak self] user in
+                print("🔧 ProfileViewModel: currentUser changed to: \(user?.username ?? "nil")")
                 self?.loadUserData()
             }
             .store(in: &cancellables)
     }
 
     func loadUserData() {
-        guard let user = authService.currentUser else { return }
+        guard let user = authService.currentUser else {
+            print("⚠️ ProfileViewModel: No currentUser in AuthService")
+            return
+        }
 
+        print("✅ ProfileViewModel: Loading user data - Username: \(user.username), Avatar: \(user.avatarEmoji)")
         self.username = user.username
         self.avatarEmoji = user.avatarEmoji
     }

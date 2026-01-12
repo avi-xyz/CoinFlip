@@ -166,6 +166,8 @@ struct ProfileView: View {
             }
             .onAppear {
                 previousAvatar = viewModel.avatarEmoji
+                // Reload user data when view appears
+                viewModel.loadUserData()
             }
         }
     }
