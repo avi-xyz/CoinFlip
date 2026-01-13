@@ -5,6 +5,7 @@ struct NotificationSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var notificationService = NotificationService.shared
     @State private var errorMessage: String?
+    @State private var successMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -79,8 +80,10 @@ struct NotificationSettingsView: View {
                                 Button("Test Notification") {
                                     Task {
                                         errorMessage = nil
+                                        successMessage = nil
                                         do {
                                             try await notificationService.scheduleTestNotification()
+                                            successMessage = "Scheduled! Press Cmd+Shift+H now"
                                             HapticManager.shared.success()
                                         } catch {
                                             errorMessage = error.localizedDescription
@@ -97,8 +100,14 @@ struct NotificationSettingsView: View {
                                         .font(.caption)
                                         .foregroundColor(.lossRed)
                                         .multilineTextAlignment(.center)
+                                } else if let success = successMessage {
+                                    Text(success)
+                                        .font(.caption)
+                                        .foregroundColor(.gainGreen)
+                                        .multilineTextAlignment(.center)
+                                        .bold()
                                 } else {
-                                    Text("Background the app to see the notification")
+                                    Text("Tap to schedule test notification")
                                         .font(.caption)
                                         .foregroundColor(.textMuted)
                                 }

@@ -27,7 +27,7 @@ struct LeaderboardView: View {
                                             Text("Net Worth")
                                                 .font(.labelSmall)
                                                 .foregroundColor(.textSecondary)
-                                            Text(Formatters.currency(currentUserEntry.netWorth, decimals: 0))
+                                            Text(Formatters.currency(currentUserEntry.netWorth, decimals: 2))
                                                 .font(.numberMedium)
                                                 .foregroundColor(.textPrimary)
                                         }
@@ -68,7 +68,7 @@ struct LeaderboardView: View {
                 viewModel.refresh()
             }
             .onAppear {
-                viewModel.loadLeaderboard()
+                // Leaderboard loads on init, no need to reload here
             }
         }
     }

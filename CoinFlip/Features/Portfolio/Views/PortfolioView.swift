@@ -14,7 +14,7 @@ struct PortfolioView: View {
                                 .font(.bodyMedium)
                                 .foregroundColor(.textSecondary)
 
-                            Text(Formatters.currency(viewModel.portfolio.cashBalance + viewModel.totalHoldingsValue))
+                            Text(Formatters.currency(viewModel.portfolio.cashBalance + viewModel.totalHoldingsValue, decimals: 2))
                                 .font(.displayMedium)
                                 .foregroundColor(.textPrimary)
                                 .contentTransition(.numericText())

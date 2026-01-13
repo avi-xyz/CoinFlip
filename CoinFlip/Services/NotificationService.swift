@@ -82,13 +82,13 @@ class NotificationService: ObservableObject {
         content.body = "Test notification - notifications are working! 🎉"
         content.sound = .default
 
-        // Use 1 second delay so it appears immediately after backgrounding
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        // Use 3 second delay to give time to background the app
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
 
         try await notificationCenter.add(request)
         print("✅ Test notification scheduled - ID: \(request.identifier)")
-        print("📬 Background the app to see the notification in 1 second")
+        print("📬 Background the app NOW - notification will appear in 3 seconds")
     }
 }
 
