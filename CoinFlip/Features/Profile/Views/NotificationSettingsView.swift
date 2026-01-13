@@ -74,19 +74,25 @@ struct NotificationSettingsView: View {
                                     .foregroundColor(.gainGreen)
                             }
 
-                            Button("Test Notification") {
-                                Task {
-                                    do {
-                                        try await notificationService.scheduleTestNotification()
-                                        HapticManager.shared.success()
-                                    } catch {
-                                        print("❌ Error scheduling notification: \(error)")
-                                        HapticManager.shared.error()
+                            VStack(spacing: Spacing.sm) {
+                                Button("Test Notification") {
+                                    Task {
+                                        do {
+                                            try await notificationService.scheduleTestNotification()
+                                            HapticManager.shared.success()
+                                        } catch {
+                                            print("❌ Error scheduling notification: \(error)")
+                                            HapticManager.shared.error()
+                                        }
                                     }
                                 }
+                                .foregroundColor(.primaryGreen)
+                                .font(.bodyMedium)
+
+                                Text("Background the app to see the notification")
+                                    .font(.caption)
+                                    .foregroundColor(.textMuted)
                             }
-                            .foregroundColor(.primaryGreen)
-                            .font(.bodyMedium)
 
                             Button("Change in Settings") {
                                 Task {

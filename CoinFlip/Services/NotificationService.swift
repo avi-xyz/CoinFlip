@@ -70,13 +70,14 @@ class NotificationService: ObservableObject {
     func scheduleTestNotification() async throws {
         let content = UNMutableNotificationContent()
         content.title = "CoinFlip"
-        content.body = "Test notification - notifications are working!"
+        content.body = "Test notification - notifications are working! 🎉"
         content.sound = .default
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        // Use 1 second delay so it appears immediately after backgrounding
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
 
         try await notificationCenter.add(request)
-        print("📬 Test notification scheduled")
+        print("📬 Test notification scheduled - will appear in 1 second when app is backgrounded")
     }
 }

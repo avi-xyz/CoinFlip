@@ -128,7 +128,7 @@ struct HomeViewTab: View {
         portfolioViewModel.currentPrices = viewModel.currentPrices
 
         let gain = viewModel.dailyChangePercentage
-        leaderboardViewModel.updateUserStats(netWorth: viewModel.netWorth, gain: gain / 100.0)
+        leaderboardViewModel.updateUserStats(netWorth: viewModel.netWorth, gain: gain)
 
         if let currentUser = leaderboardViewModel.currentUserEntry {
             profileViewModel.updateStats(netWorth: viewModel.netWorth, rank: currentUser.rank, gainPercentage: gain)
@@ -158,7 +158,7 @@ struct PortfolioViewTab: View {
         homeViewModel.calculatePortfolioMetrics()
 
         let netWorth = homeViewModel.netWorth
-        let gain = homeViewModel.dailyChangePercentage / 100.0
+        let gain = homeViewModel.dailyChangePercentage
         leaderboardViewModel.updateUserStats(netWorth: netWorth, gain: gain)
     }
 }

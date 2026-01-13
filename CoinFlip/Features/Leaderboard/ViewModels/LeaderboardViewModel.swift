@@ -62,18 +62,19 @@ class LeaderboardViewModel: ObservableObject {
     }
 
     func updateUserStats(netWorth: Double, gain: Double) {
-        // Update current user's stats
+        // Update current user's stats (gain should be in percentage form like 25 for 25%)
         if let index = leaderboardEntries.firstIndex(where: { $0.isCurrentUser }) {
             let updatedEntry = LeaderboardEntry(
                 rank: leaderboardEntries[index].rank,
                 username: leaderboardEntries[index].username,
                 avatarEmoji: leaderboardEntries[index].avatarEmoji,
                 netWorth: netWorth,
-                percentageGain: gain * 100,
+                percentageGain: gain,
                 isCurrentUser: true
             )
             leaderboardEntries[index] = updatedEntry
             currentUserEntry = updatedEntry
+            print("📊 Leaderboard updated - Net Worth: $\(Int(netWorth)), Gain: \(Int(gain))%")
         }
     }
 }

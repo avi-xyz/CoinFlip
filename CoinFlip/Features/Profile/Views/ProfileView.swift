@@ -2,10 +2,10 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var viewModel: ProfileViewModel
+    @StateObject private var themeService = ThemeService.shared
     @State private var showAvatarPicker = false
     @State private var showUsernameEditor = false
     @State private var showNotificationSettings = false
-    @State private var showThemeSettings = false
     @State private var previousAvatar: String = ""
 
     var body: some View {
@@ -42,24 +42,6 @@ struct ProfileView: View {
                             iconColor: .primaryGreen
                         ) {
                             showNotificationSettings = true
-                            HapticManager.shared.impact(.light)
-                        }
-
-                        SettingsRow(
-                            icon: "moon.fill",
-                            title: "Theme",
-                            iconColor: .primaryPurple
-                        ) {
-                            showThemeSettings = true
-                            HapticManager.shared.impact(.light)
-                        }
-
-                        SettingsRow(
-                            icon: "hand.raised.fill",
-                            title: "Haptic Feedback",
-                            value: "On",
-                            iconColor: .primaryGreen
-                        ) {
                             HapticManager.shared.impact(.light)
                         }
                     }
@@ -136,6 +118,17 @@ struct ProfileView: View {
             }
             .background(Color.appBackground)
             .navigationTitle("Profile")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        toggleTheme()
+                    }) {
+                        Image(systemName: themeService.currentTheme == .dark ? "moon.fill" : "sun.max.fill")
+                            .foregroundColor(.primaryGreen)
+                            .font(.title3)
+                    }
+                }
+            }
             .sheet(isPresented: $showAvatarPicker) {
                 AvatarPicker(selectedEmoji: $viewModel.avatarEmoji)
                     .onDisappear {
@@ -154,15 +147,18 @@ struct ProfileView: View {
             .sheet(isPresented: $showNotificationSettings) {
                 NotificationSettingsView()
             }
-            .sheet(isPresented: $showThemeSettings) {
-                ThemeSettingsView()
-            }
             .onAppear {
                 previousAvatar = viewModel.avatarEmoji
                 // Reload user data when view appears
                 viewModel.loadUserData()
             }
         }
+    }
+
+    private func toggleTheme() {
+        // Toggle between dark and system
+        let newTheme: Theme = themeService.currentTheme == .dark ? .system : .dark
+        themeService.setTheme(newTheme)
     }
 }
 
