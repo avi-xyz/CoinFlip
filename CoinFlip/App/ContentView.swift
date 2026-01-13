@@ -70,6 +70,7 @@ struct ContentView: View {
                 ProfileView()
                     .environmentObject(profileViewModel)
                     .environmentObject(authService)
+                    .environmentObject(themeService)
                     .tabItem {
                         Label("Profile", systemImage: "person.fill")
                     }

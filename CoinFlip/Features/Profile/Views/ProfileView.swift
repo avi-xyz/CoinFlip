@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var viewModel: ProfileViewModel
-    @StateObject private var themeService = ThemeService.shared
+    @EnvironmentObject var themeService: ThemeService
     @State private var showAvatarPicker = false
     @State private var showUsernameEditor = false
     @State private var showNotificationSettings = false

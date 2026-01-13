@@ -68,6 +68,15 @@ class NotificationService: ObservableObject {
 
     /// Schedule a test notification (for testing)
     func scheduleTestNotification() async throws {
+        // Check authorization first
+        let settings = await notificationCenter.notificationSettings()
+        print("📬 Current notification authorization: \(settings.authorizationStatus.rawValue)")
+
+        guard settings.authorizationStatus == .authorized else {
+            print("❌ Cannot schedule notification - not authorized")
+            throw NotificationError.notAuthorized
+        }
+
         let content = UNMutableNotificationContent()
         content.title = "CoinFlip"
         content.body = "Test notification - notifications are working! 🎉"
@@ -78,6 +87,18 @@ class NotificationService: ObservableObject {
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
 
         try await notificationCenter.add(request)
-        print("📬 Test notification scheduled - will appear in 1 second when app is backgrounded")
+        print("✅ Test notification scheduled - ID: \(request.identifier)")
+        print("📬 Background the app to see the notification in 1 second")
+    }
+}
+
+enum NotificationError: LocalizedError {
+    case notAuthorized
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthorized:
+            return "Notifications are not authorized. Please enable them in Settings."
+        }
     }
 }

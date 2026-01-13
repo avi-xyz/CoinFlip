@@ -4,6 +4,7 @@ import UserNotifications
 struct NotificationSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var notificationService = NotificationService.shared
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -77,10 +78,12 @@ struct NotificationSettingsView: View {
                             VStack(spacing: Spacing.sm) {
                                 Button("Test Notification") {
                                     Task {
+                                        errorMessage = nil
                                         do {
                                             try await notificationService.scheduleTestNotification()
                                             HapticManager.shared.success()
                                         } catch {
+                                            errorMessage = error.localizedDescription
                                             print("❌ Error scheduling notification: \(error)")
                                             HapticManager.shared.error()
                                         }
@@ -89,9 +92,16 @@ struct NotificationSettingsView: View {
                                 .foregroundColor(.primaryGreen)
                                 .font(.bodyMedium)
 
-                                Text("Background the app to see the notification")
-                                    .font(.caption)
-                                    .foregroundColor(.textMuted)
+                                if let error = errorMessage {
+                                    Text(error)
+                                        .font(.caption)
+                                        .foregroundColor(.lossRed)
+                                        .multilineTextAlignment(.center)
+                                } else {
+                                    Text("Background the app to see the notification")
+                                        .font(.caption)
+                                        .foregroundColor(.textMuted)
+                                }
                             }
 
                             Button("Change in Settings") {

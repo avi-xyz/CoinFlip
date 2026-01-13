@@ -15,6 +15,10 @@ class LeaderboardViewModel: ObservableObject {
         self.currentUserRank = currentUserRank
         self.currentUserNetWorth = currentUserNetWorth
         self.currentUserGain = currentUserGain
+        // Load leaderboard immediately on init
+        Task { @MainActor in
+            self.loadLeaderboard()
+        }
     }
 
     func loadLeaderboard() {
