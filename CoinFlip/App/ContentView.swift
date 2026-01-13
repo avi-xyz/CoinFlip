@@ -121,12 +121,25 @@ struct HomeViewTab: View {
             .onChange(of: viewModel.portfolio.cashBalance) { _, _ in
                 syncData()
             }
+            .onChange(of: viewModel.portfolio.holdings) { _, _ in
+                syncData()
+            }
+            .onChange(of: viewModel.netWorth) { _, _ in
+                syncData()
+            }
     }
 
     private func syncData() {
         portfolioViewModel.portfolio = viewModel.portfolio
         portfolioViewModel.coins = viewModel.trendingCoins
         portfolioViewModel.currentPrices = viewModel.currentPrices
+
+        print("🔄 HomeViewTab sync:")
+        print("   💰 Home net worth: $\(Int(viewModel.netWorth))")
+        print("   💼 Portfolio net worth: $\(Int(portfolioViewModel.portfolio.cashBalance + portfolioViewModel.totalHoldingsValue))")
+        print("   📊 Holdings count: \(portfolioViewModel.holdings.count)")
+        print("   💵 Cash: $\(Int(portfolioViewModel.portfolio.cashBalance))")
+        print("   💎 Holdings value: $\(Int(portfolioViewModel.totalHoldingsValue))")
 
         let gain = viewModel.dailyChangePercentage
         leaderboardViewModel.updateUserStats(netWorth: viewModel.netWorth, gain: gain)
@@ -150,6 +163,9 @@ struct PortfolioViewTab: View {
                 syncData()
             }
             .onChange(of: viewModel.portfolio.cashBalance) { _, _ in
+                syncData()
+            }
+            .onChange(of: viewModel.portfolio.holdings) { _, _ in
                 syncData()
             }
     }
