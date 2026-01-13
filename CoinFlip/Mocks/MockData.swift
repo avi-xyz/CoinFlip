@@ -44,6 +44,7 @@ enum MockData {
         Portfolio(userId: user.id, startingBalance: 1000)
     }
 
+    // Mock leaderboard data (for MockDataService only)
     static let leaderboard: [LeaderboardEntry] = [
         LeaderboardEntry(rank: 1, username: "whale_master", avatarEmoji: "👑", netWorth: 47832, percentageGain: 4683),
         LeaderboardEntry(rank: 2, username: "doge_queen", avatarEmoji: "🐕", netWorth: 12847, percentageGain: 1185),
@@ -64,14 +65,4 @@ enum MockData {
         }
         return values
     }
-}
-
-struct LeaderboardEntry: Identifiable {
-    let id = UUID()
-    let rank: Int
-    let username: String
-    let avatarEmoji: String
-    let netWorth: Double
-    let percentageGain: Double
-    var isCurrentUser: Bool = false
 }

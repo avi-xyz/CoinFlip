@@ -8,67 +8,65 @@ class LeaderboardViewModel: ObservableObject {
     @Published var isLoading = false
 
     private let authService = AuthService.shared
-    private var currentUserRank: Int = 15
+    private let dataService: DataServiceProtocol
     private var currentUserNetWorth: Double = 1000
     private var currentUserGain: Double = 0
 
-    init(currentUserRank: Int = 15, currentUserNetWorth: Double = 1000, currentUserGain: Double = 0) {
-        self.currentUserRank = currentUserRank
+    init(dataService: DataServiceProtocol? = nil, currentUserNetWorth: Double = 1000, currentUserGain: Double = 0) {
+        self.dataService = dataService ?? DataServiceFactory.shared
         self.currentUserNetWorth = currentUserNetWorth
         self.currentUserGain = currentUserGain
         // Load leaderboard immediately on init
         Task { @MainActor in
-            self.loadLeaderboard()
+            await self.loadLeaderboard()
         }
     }
 
-    func loadLeaderboard() {
+    func loadLeaderboard() async {
         isLoading = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self = self else { return }
 
-            // Load mock leaderboard
-            var entries = MockData.leaderboard
+        do {
+            // Fetch leaderboard from backend
+            var entries = try await dataService.fetchLeaderboard(limit: 50)
 
-            // Get actual user data from AuthService
-            let actualUsername = self.authService.currentUser?.username ?? "You"
-            let actualAvatar = self.authService.currentUser?.avatarEmoji ?? "🚀"
-
-            // Add current user to leaderboard with CURRENT values (not init values)
-            let currentUser = LeaderboardEntry(
-                rank: self.currentUserRank,
-                username: actualUsername,
-                avatarEmoji: actualAvatar,
-                netWorth: self.currentUserNetWorth,
-                percentageGain: self.currentUserGain,
-                isCurrentUser: true
-            )
-
-            // If user is in top 10, mark them
-            if let index = entries.firstIndex(where: { $0.rank == self.currentUserRank }) {
-                entries[index] = LeaderboardEntry(
-                    rank: entries[index].rank,
-                    username: actualUsername,
-                    avatarEmoji: actualAvatar,
-                    netWorth: self.currentUserNetWorth,
-                    percentageGain: self.currentUserGain,
-                    isCurrentUser: true
-                )
-                self.currentUserEntry = entries[index]
-            } else {
-                // User not in top 10, add them at the end
-                entries.append(currentUser)
-                self.currentUserEntry = currentUser
+            // Get current user info
+            guard let currentUser = authService.currentUser else {
+                print("⚠️ No authenticated user")
+                self.leaderboardEntries = entries
+                self.isLoading = false
+                return
             }
 
-            self.leaderboardEntries = entries.sorted { $0.rank < $1.rank }
-            self.isLoading = false
-            print("🔄 Leaderboard loaded - User: \(actualUsername) (\(actualAvatar)), Net Worth: $\(Int(self.currentUserNetWorth)), Gain: \(Int(self.currentUserGain))%")
+            // Find current user in leaderboard and mark them
+            if let index = entries.firstIndex(where: { $0.username == currentUser.username }) {
+                entries[index].isCurrentUser = true
+                self.currentUserEntry = entries[index]
+                print("✅ Found current user in top 50: Rank #\(entries[index].rank)")
+            } else {
+                // User not in top 50, fetch their rank separately
+                if let userEntry = try? await dataService.fetchUserRank(userId: currentUser.id) {
+                    self.currentUserEntry = userEntry
+                    print("✅ Current user rank: #\(userEntry.rank) (outside top 50)")
+                } else {
+                    print("⚠️ Could not fetch current user rank")
+                }
+            }
+
+            self.leaderboardEntries = entries
+            print("🏆 Leaderboard loaded: \(entries.count) entries")
+        } catch {
+            print("❌ Error loading leaderboard: \(error)")
+            // Fall back to empty state on error
+            self.leaderboardEntries = []
         }
+
+        isLoading = false
     }
 
     func refresh() {
-        loadLeaderboard()
+        Task {
+            await loadLeaderboard()
+        }
     }
 
     func updateUserStats(netWorth: Double, gain: Double) {
@@ -76,22 +74,9 @@ class LeaderboardViewModel: ObservableObject {
         self.currentUserNetWorth = netWorth
         self.currentUserGain = gain
 
-        // Update current user's stats (gain should be in percentage form like 25 for 25%)
-        if let index = leaderboardEntries.firstIndex(where: { $0.isCurrentUser }) {
-            let actualUsername = authService.currentUser?.username ?? leaderboardEntries[index].username
-            let actualAvatar = authService.currentUser?.avatarEmoji ?? leaderboardEntries[index].avatarEmoji
-
-            let updatedEntry = LeaderboardEntry(
-                rank: leaderboardEntries[index].rank,
-                username: actualUsername,
-                avatarEmoji: actualAvatar,
-                netWorth: netWorth,
-                percentageGain: gain,
-                isCurrentUser: true
-            )
-            leaderboardEntries[index] = updatedEntry
-            currentUserEntry = updatedEntry
-            print("📊 Leaderboard updated - User: \(actualUsername) (\(actualAvatar)), Net Worth: $\(Int(netWorth)), Gain: \(Int(gain))%")
+        // Refresh leaderboard to get updated rankings
+        Task {
+            await loadLeaderboard()
         }
     }
 }

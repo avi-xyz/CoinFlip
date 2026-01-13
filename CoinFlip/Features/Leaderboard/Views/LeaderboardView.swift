@@ -76,5 +76,5 @@ struct LeaderboardView: View {
 
 #Preview {
     LeaderboardView()
-        .environmentObject(LeaderboardViewModel(currentUserRank: 15, currentUserNetWorth: 1250, currentUserGain: 25))
+        .environmentObject(LeaderboardViewModel(currentUserNetWorth: 1250, currentUserGain: 25))
 }

@@ -631,16 +631,91 @@ class SupabaseDataService: DataServiceProtocol {
     // MARK: - Leaderboard Operations
 
     func fetchLeaderboard(limit: Int) async throws -> [LeaderboardEntry] {
-        // TODO: Implement with PostgreSQL function in Sprint 16
-        // For now, return empty array
-        print("⚠️ SupabaseDataService: fetchLeaderboard not yet implemented")
-        return []
+        print("🏆 Fetching leaderboard (limit: \(limit))...")
+
+        // Call the PostgreSQL function
+        let response = try await supabase
+            .rpc("get_leaderboard", params: ["limit_count": limit])
+            .execute()
+
+        if let jsonString = String(data: response.data, encoding: .utf8) {
+            print("📥 Leaderboard response: \(jsonString)")
+        }
+
+        // Decode the response
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        // The RPC function returns an array of objects with: user_id, username, avatar_emoji, net_worth, gain_percentage, rank
+        struct LeaderboardRow: Decodable {
+            let userId: UUID
+            let username: String
+            let avatarEmoji: String
+            let netWorth: Double
+            let gainPercentage: Double
+            let rank: Int
+        }
+
+        let rows = try decoder.decode([LeaderboardRow].self, from: response.data)
+
+        // Convert to LeaderboardEntry objects
+        let entries = rows.map { row in
+            LeaderboardEntry(
+                rank: row.rank,
+                username: row.username,
+                avatarEmoji: row.avatarEmoji,
+                netWorth: row.netWorth,
+                percentageGain: row.gainPercentage,
+                isCurrentUser: false  // Will be set by caller
+            )
+        }
+
+        print("✅ Loaded \(entries.count) leaderboard entries")
+        return entries
     }
 
     func fetchUserRank(userId: UUID) async throws -> LeaderboardEntry? {
-        // TODO: Implement with PostgreSQL function in Sprint 16
-        // For now, return nil
-        print("⚠️ SupabaseDataService: fetchUserRank not yet implemented")
-        return nil
+        print("🏆 Fetching rank for user: \(userId)...")
+
+        // Call the PostgreSQL function
+        let response = try await supabase
+            .rpc("get_user_rank", params: ["input_user_id": userId.uuidString.lowercased()])
+            .execute()
+
+        if let jsonString = String(data: response.data, encoding: .utf8) {
+            print("📥 User rank response: \(jsonString)")
+        }
+
+        // Decode the response
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        struct LeaderboardRow: Decodable {
+            let userId: UUID
+            let username: String
+            let avatarEmoji: String
+            let netWorth: Double
+            let gainPercentage: Double
+            let rank: Int
+        }
+
+        let rows = try decoder.decode([LeaderboardRow].self, from: response.data)
+
+        guard let row = rows.first else {
+            print("⚠️ No rank found for user")
+            return nil
+        }
+
+        let entry = LeaderboardEntry(
+            rank: row.rank,
+            username: row.username,
+            avatarEmoji: row.avatarEmoji,
+            netWorth: row.netWorth,
+            percentageGain: row.gainPercentage,
+            isCurrentUser: true
+        )
+
+        print("✅ User rank: #\(entry.rank)")
+        return entry
     }
 }
