@@ -42,7 +42,9 @@ struct FeaturedCoinCard: View {
 
                 HStack(spacing: Spacing.md) {
                     PrimaryButton(title: "Buy", icon: "🚀", action: onBuy)
+                        .accessibilityIdentifier("buyFeatured_\(coin.symbol)")
                     SecondaryButton(title: "Skip", icon: "👀", action: onSkip)
+                        .accessibilityIdentifier("skipFeatured_\(coin.symbol)")
                 }
             }
         }

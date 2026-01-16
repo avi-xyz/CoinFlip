@@ -23,6 +23,7 @@ struct BuyView: View {
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
+                .accessibilityIdentifier("buySheet")
 
             ScrollView {
                 VStack(spacing: Spacing.xl) {
@@ -81,6 +82,7 @@ struct BuyView: View {
                             coinSymbol: coin.symbol,
                             coinPrice: coin.currentPrice
                         )
+                        .accessibilityIdentifier("buyAmountInput")
                     }
 
                     // Summary
@@ -124,6 +126,7 @@ struct BuyView: View {
                     }
                     .disabled(amount < 10 || amount > availableCash)
                     .opacity(amount < 10 || amount > availableCash ? 0.5 : 1.0)
+                    .accessibilityIdentifier("confirmBuyButton")
 
                     if amount < 10 {
                         Text("Minimum purchase is $10")

@@ -47,6 +47,8 @@ struct UserProfileCard: View {
                         Text(username)
                             .font(.headline1)
                             .foregroundColor(.textPrimary)
+                            .accessibilityIdentifier("profileUsername")
+                            .accessibilityValue(username)
 
                         if onUsernameTap != nil {
                             Image(systemName: "pencil")
@@ -67,6 +69,8 @@ struct UserProfileCard: View {
                         Text("#\(rank)")
                             .font(.displayMedium)
                             .foregroundColor(.primaryGreen)
+                            .accessibilityIdentifier("profileRank")
+                            .accessibilityValue("#\(rank)")
                     }
 
                     Divider()
@@ -80,6 +84,8 @@ struct UserProfileCard: View {
                         Text(Formatters.currency(netWorth, decimals: 0))
                             .font(.numberMedium)
                             .foregroundColor(.textPrimary)
+                            .accessibilityIdentifier("profileNetWorth")
+                            .accessibilityValue(Formatters.currency(netWorth, decimals: 0))
                     }
 
                     Divider()

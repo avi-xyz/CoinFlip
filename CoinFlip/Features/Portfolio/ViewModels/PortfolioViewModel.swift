@@ -20,10 +20,17 @@ class PortfolioViewModel: ObservableObject {
     }
 
     var totalHoldingsValue: Double {
-        holdings.reduce(0) { total, holding in
+        let value = holdings.reduce(0) { total, holding in
             let price = currentPrices[holding.coinId] ?? holding.averageBuyPrice
             return total + (holding.quantity * price)
         }
+        print("💎 PortfolioViewModel.totalHoldingsValue: $\(value)")
+        print("   Holdings count: \(holdings.count)")
+        for holding in holdings {
+            let price = currentPrices[holding.coinId] ?? holding.averageBuyPrice
+            print("   - \(holding.coinSymbol): qty=\(holding.quantity), price=$\(price), value=$\(holding.quantity * price)")
+        }
+        return value
     }
 
     var totalCostBasis: Double {
@@ -72,6 +79,20 @@ class PortfolioViewModel: ObservableObject {
     }
 
     func sell(holding: Holding, quantity: Double) -> Bool {
+        print("💰 PortfolioViewModel.sell() - START")
+        print("   📊 Before sell:")
+        print("      - Cash balance: $\(portfolio.cashBalance)")
+        print("      - Holdings count: \(portfolio.holdings.count)")
+        print("      - Total holdings value: $\(totalHoldingsValue)")
+        print("      - Net worth: $\(portfolio.cashBalance + totalHoldingsValue)")
+        print("   🪙 Selling: \(holding.coinSymbol) qty=\(quantity)")
+
+        // Check if this is a complete sell BEFORE modifying portfolio
+        let isCompleteSell = (holding.quantity - quantity) < 0.00000001
+        let holdingId = holding.id
+        print("   🔍 Is complete sell: \(isCompleteSell)")
+        print("   🆔 Holding ID: \(holdingId)")
+
         // Use real-time coin data if available, fallback to holding data
         let coin = coins.first(where: { $0.id == holding.coinId }) ?? Coin(
             id: holding.coinId,
@@ -85,44 +106,66 @@ class PortfolioViewModel: ObservableObject {
             sparklineIn7d: nil
         )
 
+        print("   💵 Sell price: $\(coin.currentPrice)")
+        print("   💰 Sale proceeds: $\(quantity * coin.currentPrice)")
+
         var updatedPortfolio = portfolio
         guard let transaction = updatedPortfolio.sell(coin: coin, quantity: quantity) else {
+            print("   ❌ Sell failed - validation error")
             return false
         }
 
+        print("   📊 After sell:")
+        print("      - Cash balance: $\(updatedPortfolio.cashBalance)")
+        print("      - Holdings count: \(updatedPortfolio.holdings.count)")
+
         // Update local state first
         portfolio = updatedPortfolio
+
+        // Recalculate totals with updated portfolio
+        print("      - Total holdings value: $\(totalHoldingsValue)")
+        print("      - Net worth: $\(portfolio.cashBalance + totalHoldingsValue)")
+        print("💰 PortfolioViewModel.sell() - END (local update complete)")
+
         HapticManager.shared.success()
 
         // Persist to Supabase in background
         Task {
-            await persistSellTransaction(transaction: transaction, updatedPortfolio: updatedPortfolio)
+            await persistSellTransaction(
+                transaction: transaction,
+                updatedPortfolio: updatedPortfolio,
+                holdingId: holdingId,
+                isCompleteSell: isCompleteSell
+            )
         }
 
         return true
     }
 
     /// Persist sell transaction to Supabase
-    private func persistSellTransaction(transaction: Transaction, updatedPortfolio: Portfolio) async {
+    private func persistSellTransaction(transaction: Transaction, updatedPortfolio: Portfolio, holdingId: UUID, isCompleteSell: Bool) async {
         do {
             print("💾 PortfolioViewModel: Persisting sell transaction to Supabase...")
+            print("   🔍 Transaction type: \(isCompleteSell ? "Complete sell (delete holding)" : "Partial sell (update holding)")")
 
             // 1. Create transaction
             _ = try await dataService.createTransaction(transaction)
             print("   ✅ Transaction created: \(transaction.coinId) x \(transaction.quantity)")
 
             // 2. Update or delete holding
-            if let holding = updatedPortfolio.holdings.first(where: { $0.coinId == transaction.coinId }) {
-                if holding.quantity > 0.00000001 {
-                    // Still have coins left - update holding
+            if isCompleteSell {
+                // Complete sell - delete the holding from database
+                print("   🗑️ Deleting holding: \(transaction.coinId) (ID: \(holdingId))")
+                try await dataService.deleteHolding(holdingId: holdingId)
+                print("   ✅ Holding deleted: \(transaction.coinId)")
+            } else {
+                // Partial sell - update the holding quantity
+                if let holding = updatedPortfolio.holdings.first(where: { $0.coinId == transaction.coinId }) {
                     print("   🔄 Upserting holding: \(holding.coinId), qty: \(holding.quantity)")
                     _ = try await dataService.upsertHolding(holding)
                     print("   ✅ Holding updated: \(holding.coinId)")
                 } else {
-                    // Sold all coins - delete holding
-                    print("   🗑️ Deleting holding: \(holding.coinId)")
-                    try await dataService.deleteHolding(holdingId: holding.id)
-                    print("   ✅ Holding deleted: \(holding.coinId)")
+                    print("   ⚠️ Warning: Partial sell but holding not found in updated portfolio")
                 }
             }
 
@@ -137,8 +180,13 @@ class PortfolioViewModel: ObservableObject {
             if let userId = AuthService.shared.currentUser?.id {
                 let reloadedPortfolio = try await dataService.fetchPortfolio(userId: userId)
                 await MainActor.run {
+                    print("   🔄 Reloading portfolio from database...")
+                    print("      - DB cash balance: $\(reloadedPortfolio.cashBalance)")
+                    print("      - DB holdings count: \(reloadedPortfolio.holdings.count)")
                     self.portfolio = reloadedPortfolio
-                    print("   🔄 Portfolio reloaded from database")
+                    print("      - Portfolio view total holdings value: $\(self.totalHoldingsValue)")
+                    print("      - Portfolio view net worth: $\(self.portfolio.cashBalance + self.totalHoldingsValue)")
+                    print("   ✅ Portfolio reloaded from database")
                 }
             }
         } catch {

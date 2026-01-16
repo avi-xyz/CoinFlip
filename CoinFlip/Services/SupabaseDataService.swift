@@ -37,6 +37,14 @@ class SupabaseDataService: DataServiceProtocol {
     // MARK: - User Operations
 
     func fetchUser() async throws -> User? {
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - cannot fetch user from database")
+            throw DataServiceError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+            ]))
+        }
+
         // Get current auth user
         guard let authUser = try? await supabase.auth.session.user else {
             throw DataServiceError.notAuthenticated
@@ -264,6 +272,14 @@ class SupabaseDataService: DataServiceProtocol {
     // MARK: - Portfolio Operations
 
     func fetchPortfolio(userId: UUID) async throws -> Portfolio {
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - cannot fetch portfolio from database")
+            throw DataServiceError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+            ]))
+        }
+
         let response = try await supabase
             .from("portfolios")
             .select()
@@ -402,6 +418,14 @@ class SupabaseDataService: DataServiceProtocol {
     // MARK: - Holdings Operations
 
     func fetchHoldings(portfolioId: UUID) async throws -> [Holding] {
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - cannot fetch holdings from database")
+            throw DataServiceError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+            ]))
+        }
+
         let response = try await supabase
             .from("holdings")
             .select()
@@ -533,9 +557,27 @@ class SupabaseDataService: DataServiceProtocol {
             .execute()
     }
 
+    func deleteAllHoldings(portfolioId: UUID) async throws {
+        print("🗑️ SupabaseDataService: Deleting all holdings for portfolio \(portfolioId)")
+        _ = try await supabase
+            .from("holdings")
+            .delete()
+            .eq("portfolio_id", value: portfolioId.uuidString)
+            .execute()
+        print("   ✅ All holdings deleted")
+    }
+
     // MARK: - Transaction Operations
 
     func fetchTransactions(portfolioId: UUID, limit: Int = 100) async throws -> [Transaction] {
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - cannot fetch transactions from database")
+            throw DataServiceError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+            ]))
+        }
+
         let response = try await supabase
             .from("transactions")
             .select()
@@ -628,10 +670,28 @@ class SupabaseDataService: DataServiceProtocol {
         return createdTransaction
     }
 
+    func deleteAllTransactions(portfolioId: UUID) async throws {
+        print("🗑️ SupabaseDataService: Deleting all transactions for portfolio \(portfolioId)")
+        _ = try await supabase
+            .from("transactions")
+            .delete()
+            .eq("portfolio_id", value: portfolioId.uuidString)
+            .execute()
+        print("   ✅ All transactions deleted")
+    }
+
     // MARK: - Leaderboard Operations
 
     func fetchLeaderboard(limit: Int) async throws -> [LeaderboardEntry] {
         print("🏆 Fetching leaderboard (limit: \(limit))...")
+
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - cannot fetch leaderboard from database")
+            throw DataServiceError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Leaderboard requires connectivity."
+            ]))
+        }
 
         // Call the PostgreSQL function
         let response = try await supabase
@@ -676,6 +736,14 @@ class SupabaseDataService: DataServiceProtocol {
 
     func fetchUserRank(userId: UUID) async throws -> LeaderboardEntry? {
         print("🏆 Fetching rank for user: \(userId)...")
+
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - cannot fetch user rank from database")
+            throw DataServiceError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Rank requires connectivity."
+            ]))
+        }
 
         // Call the PostgreSQL function
         let response = try await supabase

@@ -72,16 +72,49 @@ class AuthService: ObservableObject {
     func signInAnonymously() async throws {
         print("🔐 AuthService: Attempting anonymous sign in...")
 
-        do {
-            let session = try await supabase.auth.signInAnonymously()
-            print("✅ AuthService: Anonymous sign in successful - User ID: \(session.user.id)")
+        // Retry logic with exponential backoff for rate limiting
+        var retryCount = 0
+        let maxRetries = 3
+        var lastError: Error?
 
-            // Check if user exists in database
-            await handleAuthenticatedUser(authUserId: session.user.id)
+        while retryCount < maxRetries {
+            do {
+                let session = try await supabase.auth.signInAnonymously()
+                print("✅ AuthService: Anonymous sign in successful - User ID: \(session.user.id)")
 
-        } catch {
-            print("❌ AuthService: Anonymous sign in failed - \(error.localizedDescription)")
-            self.error = "Failed to sign in: \(error.localizedDescription)"
+                // Check if user exists in database
+                await handleAuthenticatedUser(authUserId: session.user.id)
+                return
+
+            } catch {
+                lastError = error
+                let errorDescription = error.localizedDescription.lowercased()
+
+                // Check if it's a rate limit error
+                if errorDescription.contains("rate") || errorDescription.contains("limit") || errorDescription.contains("429") {
+                    retryCount += 1
+                    let delay = Double(retryCount * retryCount) * 1.0 // 1s, 4s, 9s - optimized for manual testing
+
+                    if retryCount < maxRetries {
+                        print("⚠️ AuthService: Rate limit hit, retrying in \(delay)s (attempt \(retryCount)/\(maxRetries))...")
+                        self.error = "Connection busy, retrying automatically..."
+                        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        continue
+                    }
+                }
+
+                // Non-rate-limit error or max retries reached
+                print("❌ AuthService: Anonymous sign in failed - \(error.localizedDescription)")
+                self.error = "Failed to sign in: \(error.localizedDescription)"
+                self.authState = .unauthenticated
+                throw error
+            }
+        }
+
+        // Max retries reached
+        if let error = lastError {
+            print("❌ AuthService: Max retries reached for anonymous sign in")
+            self.error = "Failed to sign in after \(maxRetries) attempts: Rate limit exceeded"
             self.authState = .unauthenticated
             throw error
         }
@@ -181,7 +214,10 @@ class AuthService: ObservableObject {
         } catch {
             print("⚠️ AuthService: No existing session found")
 
-            // Auto sign in anonymously
+            // Add a small delay before auto sign in to avoid immediate rate limiting
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second - optimized for manual use
+
+            // Auto sign in anonymously (with retry logic)
             do {
                 try await signInAnonymously()
             } catch {

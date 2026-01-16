@@ -39,6 +39,7 @@ struct SellView: View {
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
+                .accessibilityIdentifier("sellSheet")
 
             ScrollView {
                 VStack(spacing: Spacing.xl) {
@@ -117,6 +118,7 @@ struct SellView: View {
                                         .foregroundColor(.textPrimary)
                                         .cornerRadius(Spacing.xs)
                                 }
+                                .accessibilityIdentifier("sellPercent_25")
 
                                 Button {
                                     withAnimation { quantity = holding.quantity * 0.5 }
@@ -130,6 +132,7 @@ struct SellView: View {
                                         .foregroundColor(.textPrimary)
                                         .cornerRadius(Spacing.xs)
                                 }
+                                .accessibilityIdentifier("sellPercent_50")
 
                                 Button {
                                     withAnimation { quantity = holding.quantity * 0.75 }
@@ -143,6 +146,7 @@ struct SellView: View {
                                         .foregroundColor(.textPrimary)
                                         .cornerRadius(Spacing.xs)
                                 }
+                                .accessibilityIdentifier("sellPercent_75")
 
                                 Button {
                                     withAnimation { quantity = holding.quantity }
@@ -156,6 +160,7 @@ struct SellView: View {
                                         .foregroundColor(abs(quantity - holding.quantity) < 0.01 ? .primaryPurple : .textPrimary)
                                         .cornerRadius(Spacing.xs)
                                 }
+                                .accessibilityIdentifier("sellPercent_100")
                             }
 
                             Text("You'll receive: \(Formatters.currency(saleValue))")
@@ -218,6 +223,7 @@ struct SellView: View {
                     }
                     .disabled(quantity <= 0)
                     .opacity(quantity <= 0 ? 0.5 : 1.0)
+                    .accessibilityIdentifier("confirmSellButton")
 
                     if quantity <= 0 {
                         Text("Select quantity to sell")

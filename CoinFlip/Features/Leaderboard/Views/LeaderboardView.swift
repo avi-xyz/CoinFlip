@@ -21,6 +21,8 @@ struct LeaderboardView: View {
                                     Text("#\(currentUserEntry.rank)")
                                         .font(.displayLarge)
                                         .foregroundColor(.primaryGreen)
+                                        .accessibilityIdentifier("currentUserRank")
+                                        .accessibilityValue("#\(currentUserEntry.rank)")
 
                                     HStack(spacing: Spacing.xl) {
                                         VStack(spacing: Spacing.xxs) {
@@ -30,6 +32,8 @@ struct LeaderboardView: View {
                                             Text(Formatters.currency(currentUserEntry.netWorth, decimals: 2))
                                                 .font(.numberMedium)
                                                 .foregroundColor(.textPrimary)
+                                                .accessibilityIdentifier("currentUserNetWorth")
+                                                .accessibilityValue(Formatters.currency(currentUserEntry.netWorth, decimals: 2))
                                         }
 
                                         VStack(spacing: Spacing.xxs) {
@@ -39,6 +43,8 @@ struct LeaderboardView: View {
                                             Text("\(currentUserEntry.percentageGain >= 0 ? "+" : "")\(Int(currentUserEntry.percentageGain))%")
                                                 .font(.numberMedium)
                                                 .foregroundColor(currentUserEntry.percentageGain >= 0 ? .gainGreen : .lossRed)
+                                                .accessibilityIdentifier("currentUserGain")
+                                                .accessibilityValue("\(currentUserEntry.percentageGain >= 0 ? "+" : "")\(Int(currentUserEntry.percentageGain))%")
                                         }
                                     }
                                 }

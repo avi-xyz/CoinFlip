@@ -139,6 +139,16 @@ class MockDataService: DataServiceProtocol {
         holdings.remove(at: index)
     }
 
+    func deleteAllHoldings(portfolioId: UUID) async throws {
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        guard portfolioId == portfolio.id else {
+            throw DataServiceError.portfolioNotFound
+        }
+
+        holdings.removeAll()
+    }
+
     // MARK: - Transaction Operations
 
     func fetchTransactions(portfolioId: UUID, limit: Int = 100) async throws -> [Transaction] {
@@ -163,6 +173,16 @@ class MockDataService: DataServiceProtocol {
 
         transactions.insert(transaction, at: 0)
         return transaction
+    }
+
+    func deleteAllTransactions(portfolioId: UUID) async throws {
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        guard portfolioId == portfolio.id else {
+            throw DataServiceError.portfolioNotFound
+        }
+
+        transactions.removeAll()
     }
 
     // MARK: - Leaderboard Operations

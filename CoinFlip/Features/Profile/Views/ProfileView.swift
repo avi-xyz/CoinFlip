@@ -101,6 +101,7 @@ struct ProfileView: View {
                         ) {
                             viewModel.resetPortfolio()
                         }
+                        .accessibilityIdentifier("resetPortfolioButton")
 
                         SettingsRow(
                             icon: "arrow.right.circle.fill",

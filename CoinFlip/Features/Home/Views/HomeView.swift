@@ -22,7 +22,7 @@ struct HomeView: View {
                             FeaturedCoinCard(
                                 coin: featured,
                                 onBuy: { selectedCoin = featured },
-                                onSkip: { HapticManager.shared.impact(.light) }
+                                onSkip: { viewModel.skipFeaturedCoin() }
                             )
                         }
 
@@ -31,6 +31,7 @@ struct HomeView: View {
                                 .font(.headline3)
                                 .foregroundColor(.textPrimary)
                                 .padding(.horizontal, Spacing.xs)
+                                .accessibilityIdentifier("trendingCoinsHeader")
 
                             ForEach(viewModel.trendingCoins) { coin in
                                 CoinCard(coin: coin) {

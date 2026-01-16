@@ -15,6 +15,8 @@ struct NetWorthDisplay: View {
                 .font(.displayLarge)
                 .foregroundColor(.textPrimary)
                 .contentTransition(.numericText())
+                .accessibilityIdentifier("netWorthValue")
+                .accessibilityValue(Formatters.currency(amount, decimals: 2))
 
             HStack(spacing: Spacing.xxs) {
                 Image(systemName: change >= 0 ? "arrow.up.right" : "arrow.down.right")
@@ -25,6 +27,8 @@ struct NetWorthDisplay: View {
                     .font(.labelSmall)
             }
             .foregroundColor(change >= 0 ? .gainGreen : .lossRed)
+            .accessibilityIdentifier("dailyChange")
+            .accessibilityValue("\(Formatters.currency(abs(change))) today (\(Formatters.percentage(changePercentage)))")
         }
     }
 }

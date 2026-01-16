@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 class HomeViewModel: ObservableObject {
@@ -18,6 +19,11 @@ class HomeViewModel: ObservableObject {
     private let authService = AuthService.shared
     private let useMockData: Bool
     private var cancellables = Set<AnyCancellable>()
+
+    // Featured coin persistence
+    private let lastFeaturedDateKey = "lastFeaturedDate"
+    private let lastFeaturedCoinIdKey = "lastFeaturedCoinId"
+    private let hasSkippedTodayKey = "hasSkippedToday"
 
     init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, dataService: DataServiceProtocol = SupabaseDataService.shared, useMockData: Bool = false) {
         self.portfolio = portfolio
@@ -100,7 +106,7 @@ class HomeViewModel: ObservableObject {
             let coins = try await cryptoAPI.fetchTrendingCoins(limit: 20)
 
             self.trendingCoins = coins
-            self.featuredCoin = coins.first
+            self.featuredCoin = selectFeaturedCoin(from: coins)
             updatePrices()
             calculatePortfolioMetrics()
 
@@ -120,11 +126,12 @@ class HomeViewModel: ObservableObject {
     /// Load mock data (for offline development or API failure fallback)
     private func loadMockData() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.featuredCoin = MockData.featuredCoin
-            self?.trendingCoins = MockData.coins
-            self?.updatePrices()
-            self?.calculatePortfolioMetrics()
-            self?.isLoading = false
+            guard let self = self else { return }
+            self.trendingCoins = MockData.coins
+            self.featuredCoin = self.selectFeaturedCoin(from: MockData.coins)
+            self.updatePrices()
+            self.calculatePortfolioMetrics()
+            self.isLoading = false
         }
     }
 
@@ -171,6 +178,103 @@ class HomeViewModel: ObservableObject {
         }
 
         print("   📊 Daily change: $\(dailyChange) (\(dailyChangePercentage)%)")
+    }
+
+    /// Select featured "coin of the day"
+    /// Returns nil if user has already skipped today's coin
+    private func selectFeaturedCoin(from coins: [Coin]) -> Coin? {
+        guard !coins.isEmpty else { return nil }
+
+        // Check if user skipped today's coin
+        if hasSkippedTodaysCoin() {
+            print("⏭️ HomeViewModel: User already skipped today's coin, not showing featured coin")
+            return nil
+        }
+
+        // Check if it's a new day or we don't have a saved coin
+        if shouldShowNewFeaturedCoin() {
+            // Pick a random coin for today
+            let randomCoin = coins.randomElement()!
+            saveFeaturedCoinForToday(coinId: randomCoin.id)
+            print("🎲 HomeViewModel: Selected new featured coin for today: \(randomCoin.symbol)")
+            return randomCoin
+        }
+
+        // Return the saved coin of the day
+        if let savedCoinId = UserDefaults.standard.string(forKey: lastFeaturedCoinIdKey),
+           let savedCoin = coins.first(where: { $0.id == savedCoinId }) {
+            print("📌 HomeViewModel: Showing today's featured coin: \(savedCoin.symbol)")
+            return savedCoin
+        }
+
+        // Fallback to random coin if saved coin not found
+        let randomCoin = coins.randomElement()!
+        saveFeaturedCoinForToday(coinId: randomCoin.id)
+        return randomCoin
+    }
+
+    /// Check if it's a new day or we should show a new featured coin
+    private func shouldShowNewFeaturedCoin() -> Bool {
+        guard let lastDateString = UserDefaults.standard.string(forKey: lastFeaturedDateKey),
+              let lastDate = ISO8601DateFormatter().date(from: lastDateString) else {
+            // No saved date, show new coin
+            return true
+        }
+
+        // Check if it's a new day
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let lastDay = calendar.startOfDay(for: lastDate)
+
+        return today > lastDay
+    }
+
+    /// Check if user has skipped today's featured coin
+    private func hasSkippedTodaysCoin() -> Bool {
+        guard let skipDateString = UserDefaults.standard.string(forKey: hasSkippedTodayKey),
+              let skipDate = ISO8601DateFormatter().date(from: skipDateString) else {
+            return false
+        }
+
+        // Check if the skip was today
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let skipDay = calendar.startOfDay(for: skipDate)
+
+        return today == skipDay
+    }
+
+    /// Save the featured coin for today
+    private func saveFeaturedCoinForToday(coinId: String) {
+        let dateString = ISO8601DateFormatter().string(from: Date())
+        UserDefaults.standard.set(dateString, forKey: lastFeaturedDateKey)
+        UserDefaults.standard.set(coinId, forKey: lastFeaturedCoinIdKey)
+        UserDefaults.standard.removeObject(forKey: hasSkippedTodayKey) // Clear skip status
+    }
+
+    /// Skip today's featured coin - hides it until tomorrow or portfolio reset
+    func skipFeaturedCoin() {
+        guard let currentFeatured = featuredCoin else { return }
+
+        print("⏭️ HomeViewModel: Skipping today's featured coin: \(currentFeatured.symbol)")
+
+        // Mark as skipped with today's date
+        let dateString = ISO8601DateFormatter().string(from: Date())
+        UserDefaults.standard.set(dateString, forKey: hasSkippedTodayKey)
+
+        // Hide the featured coin
+        featuredCoin = nil
+
+        HapticManager.shared.impact(.light)
+        print("✅ HomeViewModel: Featured coin hidden until tomorrow or portfolio reset")
+    }
+
+    /// Reset featured coin state (called when portfolio is reset)
+    func resetFeaturedCoinState() {
+        UserDefaults.standard.removeObject(forKey: lastFeaturedDateKey)
+        UserDefaults.standard.removeObject(forKey: lastFeaturedCoinIdKey)
+        UserDefaults.standard.removeObject(forKey: hasSkippedTodayKey)
+        print("🔄 HomeViewModel: Featured coin state reset")
     }
 
     func buy(coin: Coin, amount: Double) -> Bool {
@@ -222,6 +326,61 @@ class HomeViewModel: ObservableObject {
             print("❌ HomeViewModel: Failed to persist transaction - \(error.localizedDescription)")
             print("   Error details: \(error)")
             // TODO: Could implement retry logic or show error to user
+        }
+    }
+
+    /// Reset portfolio to starting state (delete all holdings and transactions, reset cash)
+    func resetPortfolio() async {
+        print("🔄 HomeViewModel: Resetting portfolio...")
+
+        do {
+            // 1. Delete all holdings from database
+            print("   🗑️ Deleting all holdings...")
+            try await dataService.deleteAllHoldings(portfolioId: portfolio.id)
+            print("   ✅ All holdings deleted")
+
+            // 2. Delete all transactions from database
+            print("   🗑️ Deleting all transactions...")
+            try await dataService.deleteAllTransactions(portfolioId: portfolio.id)
+            print("   ✅ All transactions deleted")
+
+            // 3. Reset portfolio cash balance to starting balance
+            var resetPortfolio = portfolio
+            resetPortfolio.cashBalance = portfolio.startingBalance
+            resetPortfolio.holdings = []
+            resetPortfolio.transactions = []
+            resetPortfolio.updatedAt = Date()
+
+            print("   💵 Resetting cash to $\(portfolio.startingBalance)")
+
+            // 4. Update portfolio in database
+            _ = try await dataService.updatePortfolio(resetPortfolio)
+            print("   ✅ Portfolio updated in database")
+
+            // 5. Update local state
+            self.portfolio = resetPortfolio
+            self.netWorth = resetPortfolio.cashBalance
+            self.dailyChange = 0
+            self.dailyChangePercentage = 0
+
+            // 6. Reset featured coin state - show new coin after reset
+            resetFeaturedCoinState()
+            if !trendingCoins.isEmpty {
+                self.featuredCoin = selectFeaturedCoin(from: trendingCoins)
+            }
+
+            print("✅ HomeViewModel: Portfolio reset complete")
+            print("   💵 Cash: $\(portfolio.cashBalance)")
+            print("   📊 Holdings: \(portfolio.holdings.count)")
+            print("   💰 Net worth: $\(netWorth)")
+            print("   🎲 Featured coin reset: \(featuredCoin?.symbol ?? "none")")
+
+            HapticManager.shared.success()
+        } catch {
+            print("❌ HomeViewModel: Failed to reset portfolio - \(error.localizedDescription)")
+            print("   Error details: \(error)")
+            HapticManager.shared.error()
+            // TODO: Show error to user
         }
     }
 }

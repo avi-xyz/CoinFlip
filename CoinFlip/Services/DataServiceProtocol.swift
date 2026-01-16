@@ -65,6 +65,10 @@ protocol DataServiceProtocol {
     /// - Parameter holdingId: The holding's ID
     func deleteHolding(holdingId: UUID) async throws
 
+    /// Deletes all holdings for a portfolio
+    /// - Parameter portfolioId: The portfolio's ID
+    func deleteAllHoldings(portfolioId: UUID) async throws
+
     // MARK: - Transaction Operations
 
     /// Fetches all transactions for a portfolio
@@ -78,6 +82,10 @@ protocol DataServiceProtocol {
     /// - Parameter transaction: The transaction to create
     /// - Returns: The created transaction
     func createTransaction(_ transaction: Transaction) async throws -> Transaction
+
+    /// Deletes all transactions for a portfolio
+    /// - Parameter portfolioId: The portfolio's ID
+    func deleteAllTransactions(portfolioId: UUID) async throws
 
     // MARK: - Leaderboard Operations
 

@@ -18,6 +18,8 @@ struct PortfolioView: View {
                                 .font(.displayMedium)
                                 .foregroundColor(.textPrimary)
                                 .contentTransition(.numericText())
+                                .accessibilityIdentifier("portfolioNetWorth")
+                                .accessibilityValue(Formatters.currency(viewModel.portfolio.cashBalance + viewModel.totalHoldingsValue, decimals: 2))
 
                             HStack(spacing: Spacing.xs) {
                                 Image(systemName: viewModel.isProfit ? "arrow.up.right" : "arrow.down.right")
@@ -43,6 +45,8 @@ struct PortfolioView: View {
                                     Text(Formatters.currency(viewModel.portfolio.cashBalance))
                                         .font(.bodyMedium)
                                         .foregroundColor(.textPrimary)
+                                        .accessibilityIdentifier("portfolioCash")
+                                        .accessibilityValue(Formatters.currency(viewModel.portfolio.cashBalance))
                                 }
 
                                 Spacer()
@@ -54,6 +58,8 @@ struct PortfolioView: View {
                                     Text(Formatters.currency(viewModel.totalHoldingsValue))
                                         .font(.bodyMedium)
                                         .foregroundColor(.textPrimary)
+                                        .accessibilityIdentifier("holdingsValue")
+                                        .accessibilityValue(Formatters.currency(viewModel.totalHoldingsValue))
                                 }
                             }
                         }
@@ -72,6 +78,7 @@ struct PortfolioView: View {
                             Text("No Holdings Yet")
                                 .font(.headline1)
                                 .foregroundColor(.textPrimary)
+                                .accessibilityIdentifier("emptyPortfolioMessage")
 
                             Text("Buy some coins to start building your portfolio!")
                                 .font(.bodyMedium)

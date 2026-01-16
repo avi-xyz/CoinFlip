@@ -34,6 +34,7 @@ struct CoinCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("buyCoin_\(coin.symbol)")
     }
 }
 

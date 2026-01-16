@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var authService = AuthService.shared
     @StateObject private var themeService = ThemeService.shared
+    @StateObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var homeViewModel: HomeViewModel
     @StateObject private var portfolioViewModel: PortfolioViewModel
     @StateObject private var leaderboardViewModel: LeaderboardViewModel
@@ -77,6 +78,7 @@ struct ContentView: View {
             }
             .preferredColorScheme(themeService.currentTheme.colorScheme)
             .accentColor(.primaryGreen)
+            .environmentObject(networkMonitor)
             .onAppear {
                 setupProfileCallbacks()
 
@@ -85,6 +87,14 @@ struct ContentView: View {
                     showOnboarding = true
                 }
             }
+
+            // Offline banner at top
+            VStack {
+                OfflineBanner()
+                    .environmentObject(networkMonitor)
+                Spacer()
+            }
+            .ignoresSafeArea(edges: .top)
         }
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingView(showOnboarding: $showOnboarding)
@@ -96,11 +106,17 @@ struct ContentView: View {
 
     private func setupProfileCallbacks() {
         profileViewModel.onResetPortfolio = {
-            // Reset to empty portfolio
-            let newPortfolio = MockData.emptyPortfolio
-            homeViewModel.portfolio = newPortfolio
-            portfolioViewModel.portfolio = newPortfolio
-            homeViewModel.calculatePortfolioMetrics()
+            // Reset portfolio in database and update local state
+            Task {
+                await homeViewModel.resetPortfolio()
+
+                // Sync to portfolio view model
+                await MainActor.run {
+                    portfolioViewModel.portfolio = homeViewModel.portfolio
+                    portfolioViewModel.coins = homeViewModel.trendingCoins
+                    portfolioViewModel.currentPrices = homeViewModel.currentPrices
+                }
+            }
         }
     }
 }
@@ -130,16 +146,22 @@ struct HomeViewTab: View {
     }
 
     private func syncData() {
+        print("🔄 HomeViewTab.syncData() - START")
+        print("   📊 BEFORE sync:")
+        print("      Home: cash=$\(viewModel.portfolio.cashBalance), holdings=\(viewModel.portfolio.holdings.count), netWorth=$\(viewModel.netWorth)")
+        print("      Portfolio: cash=$\(portfolioViewModel.portfolio.cashBalance), holdings=\(portfolioViewModel.portfolio.holdings.count)")
+
         portfolioViewModel.portfolio = viewModel.portfolio
         portfolioViewModel.coins = viewModel.trendingCoins
         portfolioViewModel.currentPrices = viewModel.currentPrices
 
-        print("🔄 HomeViewTab sync:")
-        print("   💰 Home net worth: $\(Int(viewModel.netWorth))")
-        print("   💼 Portfolio net worth: $\(Int(portfolioViewModel.portfolio.cashBalance + portfolioViewModel.totalHoldingsValue))")
-        print("   📊 Holdings count: \(portfolioViewModel.holdings.count)")
-        print("   💵 Cash: $\(Int(portfolioViewModel.portfolio.cashBalance))")
-        print("   💎 Holdings value: $\(Int(portfolioViewModel.totalHoldingsValue))")
+        print("   📊 AFTER sync:")
+        print("      💰 Home net worth: $\(viewModel.netWorth)")
+        print("      💼 Portfolio net worth: $\(portfolioViewModel.portfolio.cashBalance + portfolioViewModel.totalHoldingsValue)")
+        print("      📊 Holdings count: \(portfolioViewModel.holdings.count)")
+        print("      💵 Cash: $\(portfolioViewModel.portfolio.cashBalance)")
+        print("      💎 Holdings value: $\(portfolioViewModel.totalHoldingsValue)")
+        print("      🔢 Current prices count: \(portfolioViewModel.currentPrices.count)")
 
         let gain = viewModel.dailyChangePercentage
         leaderboardViewModel.updateUserStats(netWorth: viewModel.netWorth, gain: gain)
@@ -171,11 +193,23 @@ struct PortfolioViewTab: View {
     }
 
     private func syncData() {
+        print("🔄 PortfolioViewTab.syncData() - START")
+        print("   📊 BEFORE sync:")
+        print("      Portfolio: cash=$\(viewModel.portfolio.cashBalance), holdings=\(viewModel.portfolio.holdings.count), totalHoldingsValue=$\(viewModel.totalHoldingsValue)")
+        print("      Home: cash=$\(homeViewModel.portfolio.cashBalance), holdings=\(homeViewModel.portfolio.holdings.count), netWorth=$\(homeViewModel.netWorth)")
+
         homeViewModel.portfolio = viewModel.portfolio
         homeViewModel.calculatePortfolioMetrics()
 
         let netWorth = homeViewModel.netWorth
         let gain = homeViewModel.dailyChangePercentage
+
+        print("   📊 AFTER sync:")
+        print("      Home: cash=$\(homeViewModel.portfolio.cashBalance), holdings=\(homeViewModel.portfolio.holdings.count)")
+        print("      Home netWorth: $\(netWorth)")
+        print("      Home dailyChange: $\(homeViewModel.dailyChange) (\(gain)%)")
+        print("🔄 PortfolioViewTab.syncData() - END")
+
         leaderboardViewModel.updateUserStats(netWorth: netWorth, gain: gain)
     }
 }

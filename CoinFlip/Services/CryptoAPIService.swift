@@ -49,6 +49,19 @@ class CryptoAPIService {
     func fetchTrendingCoins(limit: Int = 20, forceRefresh: Bool = false) async throws -> [Coin] {
         print("🪙 CryptoAPIService: Fetching coins...")
 
+        // Check if offline - return cache if available
+        if !NetworkMonitor.shared.isConnected {
+            if !cachedCoins.isEmpty {
+                print("   📵 Offline - returning cached coins (\(cachedCoins.count) available)")
+                return Array(cachedCoins.prefix(limit))
+            } else {
+                print("   ❌ Offline and no cached data available")
+                throw CryptoAPIError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                    NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+                ]))
+            }
+        }
+
         // Check cache first
         if !forceRefresh, let lastFetch = lastFetchTime {
             let timeSinceLastFetch = Date().timeIntervalSince(lastFetch)
@@ -139,6 +152,18 @@ class CryptoAPIService {
     /// - Parameter coinId: CoinGecko coin ID (e.g., "bitcoin", "ethereum")
     /// - Returns: Current price in USD
     func fetchCoinPrice(coinId: String) async throws -> Double {
+        // Check if offline - return cached price if available
+        if !NetworkMonitor.shared.isConnected {
+            if let cachedCoin = cachedCoins.first(where: { $0.id == coinId }) {
+                print("   📵 Offline - returning cached price for \(coinId)")
+                return cachedCoin.currentPrice
+            } else {
+                throw CryptoAPIError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                    NSLocalizedDescriptionKey: "No internet connection"
+                ]))
+            }
+        }
+
         // Check if coin is in cache
         if let cachedCoin = cachedCoins.first(where: { $0.id == coinId }),
            let lastFetch = lastFetchTime,

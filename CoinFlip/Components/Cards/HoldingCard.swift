@@ -61,6 +61,7 @@ struct HoldingCard: View {
                         Text("\(Formatters.quantity(holding.quantity)) \(coin.symbol.uppercased())")
                             .font(.bodySmall)
                             .foregroundColor(.textSecondary)
+                            .accessibilityIdentifier("holdingQty_\(coin.symbol)")
 
                         Text("Avg: \(Formatters.cryptoPrice(holding.averageBuyPrice))")
                             .font(.labelSmall)
@@ -74,6 +75,7 @@ struct HoldingCard: View {
                         Text(Formatters.currency(currentValue))
                             .font(.numberMedium)
                             .foregroundColor(.textPrimary)
+                            .accessibilityIdentifier("holdingValue_\(coin.symbol)")
 
                         HStack(spacing: Spacing.xxs) {
                             Image(systemName: isProfit ? "arrow.up.right" : "arrow.down.right")
@@ -83,6 +85,7 @@ struct HoldingCard: View {
                                 .font(.labelMedium)
                         }
                         .foregroundColor(isProfit ? .gainGreen : .lossRed)
+                        .accessibilityIdentifier("holdingPL_\(coin.symbol)")
 
                         Text(Formatters.percentage(profitLossPercentage))
                             .font(.labelSmall)
@@ -92,6 +95,7 @@ struct HoldingCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("holding_\(coin.symbol)")
     }
 }
 

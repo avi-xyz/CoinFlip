@@ -22,6 +22,20 @@ struct UsernameSetupView: View {
             // Background
             Color.appBackground
                 .ignoresSafeArea()
+                .onAppear {
+                    // Auto-create test user in UI testing mode
+                    if ProcessInfo.processInfo.environment["AUTO_CREATE_TEST_USER"] == "1" {
+                        // Use unique username with timestamp to avoid conflicts
+                        let timestamp = Int(Date().timeIntervalSince1970)
+                        username = "TestUser\(timestamp)"
+                        selectedEmoji = "🚀"
+                        print("🧪 [UI-Testing] Auto-creating user with username: \(username)")
+                        // Small delay to let UI settle
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            createProfile()
+                        }
+                    }
+                }
 
             VStack(spacing: Spacing.xl) {
                 Spacer()
@@ -69,6 +83,7 @@ struct UsernameSetupView: View {
                                             )
                                     )
                             }
+                            .accessibilityIdentifier("avatarEmoji_\(emoji)")
                         }
                     }
                     .padding(.horizontal, Spacing.lg)
@@ -93,6 +108,7 @@ struct UsernameSetupView: View {
                             RoundedRectangle(cornerRadius: Spacing.cardRadius)
                                 .stroke(Color.textMuted.opacity(0.2), lineWidth: 1)
                         )
+                        .accessibilityIdentifier("usernameTextField")
 
                     Text("3-20 characters, letters and numbers only")
                         .font(.labelSmall)
@@ -119,6 +135,7 @@ struct UsernameSetupView: View {
                 }
                 .padding(.horizontal, Spacing.lg)
                 .padding(.bottom, Spacing.xl)
+                .accessibilityIdentifier("startTradingButton")
             }
         }
     }
