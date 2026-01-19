@@ -30,7 +30,15 @@ struct AmountSlider: View {
             HStack {
                 Text("$10").font(.labelSmall).foregroundColor(.textSecondary)
                 Spacer()
-                Text("ALL IN").font(.labelSmall).foregroundColor(.primaryGreen)
+                Button {
+                    withAnimation { amount = maxAmount }
+                    HapticManager.shared.impact(.light)
+                } label: {
+                    Text("ALL IN")
+                        .font(.labelSmall)
+                        .foregroundColor(.primaryGreen)
+                }
+                .disabled(maxAmount < 10)
             }
 
             HStack(spacing: Spacing.sm) {
