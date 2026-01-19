@@ -14,6 +14,15 @@ A fun iOS app for simulating meme coin trading with real-time crypto prices. Tra
 - **Net Worth Display**: Real-time portfolio valuation
 - **Pull-to-Refresh**: Update prices on demand
 
+### 🔥 Viral Coins (NEW!)
+- **Ultra-Fresh Discoveries**: Meme coins from the last hour
+- **Multi-Chain Coverage**: 200+ blockchains (Ethereum, Solana, Base, BSC, and more)
+- **Real-Time Trending**: 30-second auto-refresh
+- **Viral Metrics**: Hourly price changes, transaction counts, launch times
+- **Educational Risk**: Learn market volatility with extreme examples
+- **Filtering**: >50% price spike OR >100 txns/hour OR <1hr old
+- **Chain Badges**: See which blockchain each coin is on
+
 ### 💰 Trading
 - **Buy Coins**: Purchase with virtual cash ($1,000 starting balance)
 - **Sell Holdings**: Sell in percentages (25%, 50%, 75%, 100%)
@@ -62,7 +71,8 @@ A fun iOS app for simulating meme coin trading with real-time crypto prices. Tra
   - Anonymous authentication
 
 ### APIs
-- **CoinGecko API**: Real-time cryptocurrency data
+- **CoinGecko API**: Real-time cryptocurrency data (trending coins)
+- **GeckoTerminal API**: Viral meme coins from 200+ blockchains
 - **Supabase REST API**: Data persistence
 
 ### Dependencies (Swift Package Manager)

@@ -56,6 +56,12 @@ struct ContentView: View {
                         Label("Home", systemImage: "house.fill")
                     }
 
+                ViralCoinsView()
+                    .environmentObject(homeViewModel)
+                    .tabItem {
+                        Label("Viral", systemImage: "flame.fill")
+                    }
+
                 PortfolioViewTab(viewModel: portfolioViewModel, homeViewModel: homeViewModel, leaderboardViewModel: leaderboardViewModel)
                     .tabItem {
                         Label("Portfolio", systemImage: "chart.pie.fill")
