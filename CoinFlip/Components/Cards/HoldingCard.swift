@@ -27,6 +27,10 @@ struct HoldingCard: View {
         profitLoss >= 0
     }
 
+    private var isPriceUnavailable: Bool {
+        currentPrice == 0.0
+    }
+
     var body: some View {
         Button(action: onTap) {
             BaseCard {
@@ -72,24 +76,41 @@ struct HoldingCard: View {
 
                     // Value & P/L
                     VStack(alignment: .trailing, spacing: Spacing.xxs) {
-                        Text(Formatters.currency(currentValue))
-                            .font(.numberMedium)
-                            .foregroundColor(.textPrimary)
+                        if isPriceUnavailable {
+                            HStack(spacing: Spacing.xxs) {
+                                Text("—")
+                                    .font(.numberMedium)
+                                    .foregroundColor(.textMuted)
+
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.orange)
+                            }
                             .accessibilityIdentifier("holdingValue_\(coin.symbol)")
 
-                        HStack(spacing: Spacing.xxs) {
-                            Image(systemName: isProfit ? "arrow.up.right" : "arrow.down.right")
+                            Text("Price N/A")
                                 .font(.labelSmall)
+                                .foregroundColor(.orange)
+                        } else {
+                            Text(Formatters.currency(currentValue))
+                                .font(.numberMedium)
+                                .foregroundColor(.textPrimary)
+                                .accessibilityIdentifier("holdingValue_\(coin.symbol)")
 
-                            Text(Formatters.currency(abs(profitLoss)))
-                                .font(.labelMedium)
-                        }
-                        .foregroundColor(isProfit ? .gainGreen : .lossRed)
-                        .accessibilityIdentifier("holdingPL_\(coin.symbol)")
+                            HStack(spacing: Spacing.xxs) {
+                                Image(systemName: isProfit ? "arrow.up.right" : "arrow.down.right")
+                                    .font(.labelSmall)
 
-                        Text(Formatters.percentage(profitLossPercentage))
-                            .font(.labelSmall)
+                                Text(Formatters.currency(abs(profitLoss)))
+                                    .font(.labelMedium)
+                            }
                             .foregroundColor(isProfit ? .gainGreen : .lossRed)
+                            .accessibilityIdentifier("holdingPL_\(coin.symbol)")
+
+                            Text(Formatters.percentage(profitLossPercentage))
+                                .font(.labelSmall)
+                                .foregroundColor(isProfit ? .gainGreen : .lossRed)
+                        }
                     }
                 }
             }

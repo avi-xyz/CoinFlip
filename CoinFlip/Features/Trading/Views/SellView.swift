@@ -36,6 +36,10 @@ struct SellView: View {
         profitLoss >= 0
     }
 
+    private var isPriceUnavailable: Bool {
+        currentPrice == 0.0
+    }
+
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
@@ -43,6 +47,35 @@ struct SellView: View {
 
             ScrollView {
                 VStack(spacing: Spacing.xl) {
+                    // Price Unavailable Warning
+                    if isPriceUnavailable {
+                        HStack(spacing: Spacing.sm) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.headline3)
+
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text("Price Unavailable")
+                                    .font(.labelMedium)
+                                    .foregroundColor(.textPrimary)
+
+                                Text("Latest price could not be fetched. Cannot sell at this time.")
+                                    .font(.labelSmall)
+                                    .foregroundColor(.textSecondary)
+                            }
+
+                            Spacer()
+                        }
+                        .padding(Spacing.md)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(Spacing.sm)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Spacing.sm)
+                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal, Spacing.md)
+                    }
+
                     // Coin Header
                     VStack(spacing: Spacing.md) {
                         AsyncImage(url: coin.image) { image in
@@ -102,7 +135,14 @@ struct SellView: View {
                             HStack {
                                 Text("0").font(.labelSmall).foregroundColor(.textSecondary)
                                 Spacer()
-                                Text("ALL").font(.labelSmall).foregroundColor(.primaryPurple)
+                                Button {
+                                    withAnimation { quantity = holding.quantity }
+                                    HapticManager.shared.impact(.light)
+                                } label: {
+                                    Text("ALL")
+                                        .font(.labelSmall)
+                                        .foregroundColor(.primaryPurple)
+                                }
                             }
 
                             HStack(spacing: Spacing.sm) {
@@ -163,9 +203,15 @@ struct SellView: View {
                                 .accessibilityIdentifier("sellPercent_100")
                             }
 
-                            Text("You'll receive: \(Formatters.currency(saleValue))")
-                                .font(.bodySmall)
-                                .foregroundColor(.textSecondary)
+                            if isPriceUnavailable {
+                                Text("Price Unavailable")
+                                    .font(.bodySmall)
+                                    .foregroundColor(.orange)
+                            } else {
+                                Text("You'll receive: \(Formatters.currency(saleValue))")
+                                    .font(.bodySmall)
+                                    .foregroundColor(.textSecondary)
+                            }
                         }
                     }
 
@@ -187,9 +233,15 @@ struct SellView: View {
                                     .font(.bodyMedium)
                                     .foregroundColor(.textSecondary)
                                 Spacer()
-                                Text(Formatters.currency(saleValue))
-                                    .font(.bodyMedium)
-                                    .foregroundColor(.textPrimary)
+                                if isPriceUnavailable {
+                                    Text("Price Unavailable")
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.orange)
+                                } else {
+                                    Text(Formatters.currency(saleValue))
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.textPrimary)
+                                }
                             }
 
                             HStack {
@@ -210,9 +262,15 @@ struct SellView: View {
                                     .font(.bodyMedium)
                                     .foregroundColor(.textSecondary)
                                 Spacer()
-                                Text("\(isProfit ? "+" : "")\(Formatters.currency(profitLoss))")
-                                    .font(.numberMedium)
-                                    .foregroundColor(isProfit ? .gainGreen : .lossRed)
+                                if isPriceUnavailable {
+                                    Text("—")
+                                        .font(.numberMedium)
+                                        .foregroundColor(.textMuted)
+                                } else {
+                                    Text("\(isProfit ? "+" : "")\(Formatters.currency(profitLoss))")
+                                        .font(.numberMedium)
+                                        .foregroundColor(isProfit ? .gainGreen : .lossRed)
+                                }
                             }
                         }
                     }
@@ -221,14 +279,18 @@ struct SellView: View {
                     PrimaryButton(title: "Confirm Sale") {
                         executeSale()
                     }
-                    .disabled(quantity <= 0)
-                    .opacity(quantity <= 0 ? 0.5 : 1.0)
+                    .disabled(quantity <= 0 || isPriceUnavailable)
+                    .opacity(quantity <= 0 || isPriceUnavailable ? 0.5 : 1.0)
                     .accessibilityIdentifier("confirmSellButton")
 
                     if quantity <= 0 {
                         Text("Select quantity to sell")
                             .font(.labelSmall)
                             .foregroundColor(.lossRed)
+                    } else if isPriceUnavailable {
+                        Text("Cannot sell - price unavailable")
+                            .font(.labelSmall)
+                            .foregroundColor(.orange)
                     }
                 }
                 .padding(.horizontal, Spacing.md)

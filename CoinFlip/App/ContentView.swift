@@ -156,18 +156,23 @@ struct HomeViewTab: View {
         print("   📊 BEFORE sync:")
         print("      Home: cash=$\(viewModel.portfolio.cashBalance), holdings=\(viewModel.portfolio.holdings.count), netWorth=$\(viewModel.netWorth)")
         print("      Portfolio: cash=$\(portfolioViewModel.portfolio.cashBalance), holdings=\(portfolioViewModel.portfolio.holdings.count)")
+        print("      Home currentPrices count: \(viewModel.currentPrices.count)")
+        print("      Portfolio currentPrices count: \(portfolioViewModel.currentPrices.count)")
 
         portfolioViewModel.portfolio = viewModel.portfolio
         portfolioViewModel.coins = viewModel.trendingCoins
         portfolioViewModel.currentPrices = viewModel.currentPrices
 
         print("   📊 AFTER sync:")
+        print("      Portfolio currentPrices count: \(portfolioViewModel.currentPrices.count)")
+        if !viewModel.currentPrices.isEmpty {
+            print("      Synced prices: \(viewModel.currentPrices.keys.joined(separator: ", "))")
+        }
         print("      💰 Home net worth: $\(viewModel.netWorth)")
         print("      💼 Portfolio net worth: $\(portfolioViewModel.portfolio.cashBalance + portfolioViewModel.totalHoldingsValue)")
         print("      📊 Holdings count: \(portfolioViewModel.holdings.count)")
         print("      💵 Cash: $\(portfolioViewModel.portfolio.cashBalance)")
         print("      💎 Holdings value: $\(portfolioViewModel.totalHoldingsValue)")
-        print("      🔢 Current prices count: \(portfolioViewModel.currentPrices.count)")
 
         let gain = viewModel.dailyChangePercentage
         leaderboardViewModel.updateUserStats(netWorth: viewModel.netWorth, gain: gain)
@@ -205,18 +210,20 @@ struct PortfolioViewTab: View {
         print("      Home: cash=$\(homeViewModel.portfolio.cashBalance), holdings=\(homeViewModel.portfolio.holdings.count), netWorth=$\(homeViewModel.netWorth)")
 
         homeViewModel.portfolio = viewModel.portfolio
-        homeViewModel.calculatePortfolioMetrics()
+        Task {
+            await homeViewModel.calculatePortfolioMetrics()
 
-        let netWorth = homeViewModel.netWorth
-        let gain = homeViewModel.dailyChangePercentage
+            let netWorth = homeViewModel.netWorth
+            let gain = homeViewModel.dailyChangePercentage
 
-        print("   📊 AFTER sync:")
-        print("      Home: cash=$\(homeViewModel.portfolio.cashBalance), holdings=\(homeViewModel.portfolio.holdings.count)")
-        print("      Home netWorth: $\(netWorth)")
-        print("      Home dailyChange: $\(homeViewModel.dailyChange) (\(gain)%)")
-        print("🔄 PortfolioViewTab.syncData() - END")
+            print("   📊 AFTER sync:")
+            print("      Home: cash=$\(homeViewModel.portfolio.cashBalance), holdings=\(homeViewModel.portfolio.holdings.count)")
+            print("      Home netWorth: $\(netWorth)")
+            print("      Home dailyChange: $\(homeViewModel.dailyChange) (\(gain)%)")
+            print("🔄 PortfolioViewTab.syncData() - END")
 
-        leaderboardViewModel.updateUserStats(netWorth: netWorth, gain: gain)
+            leaderboardViewModel.updateUserStats(netWorth: netWorth, gain: gain)
+        }
     }
 }
 

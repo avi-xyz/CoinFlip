@@ -69,6 +69,12 @@ protocol DataServiceProtocol {
     /// - Parameter portfolioId: The portfolio's ID
     func deleteAllHoldings(portfolioId: UUID) async throws
 
+    /// Updates a holding's chainId (for backfilling viral coin data)
+    /// - Parameters:
+    ///   - holdingId: The holding's ID
+    ///   - chainId: The blockchain network identifier (e.g., "solana", "eth", "base")
+    func updateHoldingChainId(holdingId: UUID, chainId: String) async throws
+
     // MARK: - Transaction Operations
 
     /// Fetches all transactions for a portfolio

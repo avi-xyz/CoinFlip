@@ -12,6 +12,7 @@ struct Holding: Codable, Identifiable, Equatable {
     let firstPurchaseDate: Date
     var createdAt: Date
     var updatedAt: Date?
+    let chainId: String? // Blockchain network (e.g., "solana", "eth", "base") - for viral coins
 
     // CodingKeys for snake_case database columns
     enum CodingKeys: String, CodingKey {
@@ -26,6 +27,7 @@ struct Holding: Codable, Identifiable, Equatable {
         case firstPurchaseDate = "first_purchase_date"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case chainId = "chain_id"
     }
 
     init(
@@ -46,6 +48,7 @@ struct Holding: Codable, Identifiable, Equatable {
         self.firstPurchaseDate = Date()
         self.createdAt = Date()
         self.updatedAt = nil
+        self.chainId = coin.chainId // Store chain for viral coins
     }
 
     func currentValue(price: Double) -> Double { quantity * price }

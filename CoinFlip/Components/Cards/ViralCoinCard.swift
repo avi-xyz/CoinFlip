@@ -2,8 +2,8 @@
 //  ViralCoinCard.swift
 //  CoinFlip
 //
-//  Card component for displaying viral/trending meme coins
-//  Features prominent hourly metrics, chain info, and dramatic styling
+//  Professional card design for viral/trending meme coins
+//  Emphasizes hourly metrics and visual hierarchy
 //
 
 import SwiftUI
@@ -12,165 +12,236 @@ struct ViralCoinCard: View {
     let coin: Coin
     let onTap: () -> Void
 
+    private var isExtremelyHot: Bool {
+        (coin.priceChangeH1 ?? 0) > 100
+    }
+
+    private var isHot: Bool {
+        (coin.priceChangeH1 ?? 0) > 50
+    }
+
     var body: some View {
         Button(action: {
             HapticManager.shared.impact(.light)
             onTap()
         }) {
-            HStack(spacing: Spacing.md) {
-                // Coin Image/Placeholder
-                CoinImageView(url: coin.image)
+            VStack(spacing: 0) {
+                HStack(spacing: Spacing.md) {
+                    // Professional Icon/Avatar
+                    CoinAvatar(symbol: coin.symbol, imageURL: coin.image)
 
-                // Coin Info
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    // Name and Symbol
-                    HStack(spacing: Spacing.xs) {
-                        Text(coin.symbol)
-                            .font(.headline3)
+                    // Main Content
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        // Top Row: Symbol + Badges
+                        HStack(spacing: Spacing.xs) {
+                            Text(coin.symbol)
+                                .font(.headline2)
+                                .foregroundColor(.textPrimary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+
+                            if coin.chainId != nil {
+                                ChainBadge(chain: coin.chainDisplayName)
+                            }
+
+                            if let createdAt = coin.poolCreatedAt,
+                               Date().timeIntervalSince(createdAt) < 3600 {
+                                NewBadge()
+                            }
+                        }
+
+                        // Metrics Row
+                        HStack(spacing: Spacing.sm) {
+                            // Launch time
+                            if let createdAt = coin.poolCreatedAt {
+                                Label(coin.timeSinceLaunch, systemImage: "clock")
+                                    .font(.labelSmall)
+                                    .foregroundColor(.textSecondary)
+                            }
+
+                            // Transaction count
+                            if let txns = coin.txnsH1, txns > 0 {
+                                Label("\(txns)", systemImage: "arrow.left.arrow.right")
+                                    .font(.labelSmall)
+                                    .foregroundColor(.textSecondary)
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: Spacing.sm)
+
+                    // Right Side: Price & Change
+                    VStack(alignment: .trailing, spacing: Spacing.xs) {
+                        Text(coin.formattedPrice)
+                            .font(.numberMedium)
                             .foregroundColor(.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
 
-                        if let createdAt = coin.poolCreatedAt,
-                           Date().timeIntervalSince(createdAt) < 3600 {
-                            NewBadge()
-                        }
-
-                        if coin.chainId != nil {
-                            ChainBadge(chain: coin.chainDisplayName)
+                        if let changeH1 = coin.priceChangeH1 {
+                            HourlyChangeBadge(change: changeH1, prominent: true)
                         }
                     }
-
-                    Text(coin.name)
-                        .font(.labelMedium)
-                        .foregroundColor(.textSecondary)
-                        .lineLimit(1)
-
-                    // Launch Time
-                    if let createdAt = coin.poolCreatedAt {
-                        HStack(spacing: Spacing.xxs) {
-                            Image(systemName: "clock.fill")
-                                .font(.labelSmall)
-                                .foregroundColor(.textSecondary)
-
-                            Text("Launched \(coin.timeSinceLaunch)")
-                                .font(.labelSmall)
-                                .foregroundColor(.textSecondary)
-                        }
-                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer()
-
-                // Hourly Metrics
-                VStack(alignment: .trailing, spacing: Spacing.xs) {
-                    // Price
-                    Text(coin.formattedPrice)
-                        .font(.numberMedium)
-                        .foregroundColor(.textPrimary)
-
-                    // Hourly Change (primary metric)
-                    if let changeH1 = coin.priceChangeH1 {
-                        HourlyChangeBadge(change: changeH1)
-                    }
-
-                    // Transaction Count
-                    if let txns = coin.txnsH1, txns > 0 {
-                        HStack(spacing: Spacing.xxs) {
-                            Image(systemName: "arrow.left.arrow.right")
-                                .font(.labelSmall)
-
-                            Text("\(txns) txns/h")
-                                .font(.labelSmall)
-                        }
-                        .foregroundColor(.textSecondary)
-                    }
-                }
+                .padding(Spacing.md)
             }
-            .padding(Spacing.md)
-            .background(
-                // Gradient background for hot coins
-                gradientBackground(for: coin.priceChangeH1 ?? 0)
-            )
+            .background(cardBackground)
             .cornerRadius(Spacing.md)
-            .shadow(color: shadowColor(for: coin.priceChangeH1 ?? 0), radius: 8, x: 0, y: 2)
+            .shadow(color: shadowColor, radius: isExtremelyHot ? 12 : 6, x: 0, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: Spacing.md)
+                    .stroke(borderColor, lineWidth: isExtremelyHot ? 2 : 1)
+            )
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: - Helper Views
+    // MARK: - Visual Styling
 
     @ViewBuilder
-    private func gradientBackground(for change: Double) -> some View {
-        if change > 100 {
-            // Super hot - red/orange gradient
+    private var cardBackground: some View {
+        if isExtremelyHot {
+            // Extreme heat: Animated red gradient
             LinearGradient(
                 colors: [
-                    Color.red.opacity(0.15),
-                    Color.orange.opacity(0.1),
-                    Color.cardBackground
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        } else if change > 50 {
-            // Hot - orange gradient
-            LinearGradient(
-                colors: [
+                    Color.red.opacity(0.2),
                     Color.orange.opacity(0.15),
                     Color.cardBackground
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+        } else if isHot {
+            // Hot: Orange gradient
+            LinearGradient(
+                colors: [
+                    Color.orange.opacity(0.15),
+                    Color.yellow.opacity(0.1),
+                    Color.cardBackground
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         } else {
-            // Normal - card background
+            // Normal
             Color.cardBackground
         }
     }
 
-    private func shadowColor(for change: Double) -> Color {
-        if change > 100 {
+    private var borderColor: Color {
+        if isExtremelyHot {
+            return Color.red.opacity(0.4)
+        } else if isHot {
+            return Color.orange.opacity(0.3)
+        } else {
+            return Color.borderPrimary.opacity(0.3)
+        }
+    }
+
+    private var shadowColor: Color {
+        if isExtremelyHot {
             return Color.red.opacity(0.3)
-        } else if change > 50 {
+        } else if isHot {
             return Color.orange.opacity(0.2)
         } else {
-            return Color.black.opacity(0.1)
+            return Color.black.opacity(0.05)
         }
     }
 }
 
 // MARK: - Supporting Components
 
-private struct CoinImageView: View {
-    let url: URL?
+private struct CoinAvatar: View {
+    let symbol: String
+    let imageURL: URL?
+
+    private var firstLetter: String {
+        String(symbol.prefix(1))
+    }
+
+    private var gradientColors: [Color] {
+        // Generate consistent colors based on symbol
+        let hash = symbol.hashValue
+        let hue = Double(abs(hash) % 360) / 360.0
+
+        return [
+            Color(hue: hue, saturation: 0.6, brightness: 0.8),
+            Color(hue: hue, saturation: 0.7, brightness: 0.6)
+        ]
+    }
 
     var body: some View {
         Group {
-            if let imageURL = url {
-                AsyncImage(url: imageURL) { image in
-                    image
-                        .resizable()
-                        .scaledToFit()
-                } placeholder: {
-                    Circle().fill(Color.cardBackgroundElevated)
+            if let imageURL = imageURL {
+                // Try to load image
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure, .empty:
+                        placeholderAvatar
+                    @unknown default:
+                        placeholderAvatar
+                    }
                 }
             } else {
-                // Placeholder for coins without images
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.primaryGreen, Color.primaryGreen.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        Text("🔥")
-                            .font(.title3)
-                    )
+                placeholderAvatar
             }
         }
-        .frame(width: 48, height: 48)
+        .frame(width: 52, height: 52)
         .clipShape(Circle())
+    }
+
+    private var placeholderAvatar: some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: gradientColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                Text(firstLetter)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+            )
+    }
+}
+
+private struct ChainBadge: View {
+    let chain: String
+
+    private var chainIcon: String {
+        switch chain.lowercased() {
+        case "ethereum": return "⟠"
+        case "solana": return "◎"
+        case "base": return "🔵"
+        case "polygon": return "⬡"
+        case "bsc", "binance": return "🟡"
+        case "arbitrum": return "🔷"
+        case "optimism": return "🔴"
+        case "avalanche": return "🔺"
+        default: return "⚡"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(chainIcon)
+                .font(.system(size: 10))
+
+            Text(chain)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundColor(.textSecondary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.cardBackgroundElevated)
+        .cornerRadius(4)
     }
 }
 
@@ -181,11 +252,11 @@ private struct NewBadge: View {
         Text("NEW")
             .font(.system(size: 9, weight: .bold))
             .foregroundColor(.white)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
             .background(Color.red)
-            .cornerRadius(3)
-            .scaleEffect(pulse ? 1.1 : 1.0)
+            .cornerRadius(4)
+            .scaleEffect(pulse ? 1.05 : 1.0)
             .animation(
                 .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
                 value: pulse
@@ -196,24 +267,11 @@ private struct NewBadge: View {
     }
 }
 
-private struct ChainBadge: View {
-    let chain: String
-
-    var body: some View {
-        Text(chain)
-            .font(.system(size: 9, weight: .medium))
-            .foregroundColor(.textSecondary)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .background(Color.cardBackgroundElevated)
-            .cornerRadius(3)
-    }
-}
-
 private struct HourlyChangeBadge: View {
     let change: Double
+    let prominent: Bool
 
-    var color: Color {
+    private var color: Color {
         if change > 100 {
             return .red
         } else if change > 50 {
@@ -225,11 +283,11 @@ private struct HourlyChangeBadge: View {
         }
     }
 
-    var icon: String {
+    private var icon: String {
         if change > 100 {
             return "flame.fill"
         } else if change > 50 {
-            return "arrow.up.right"
+            return "bolt.fill"
         } else if change > 0 {
             return "arrow.up"
         } else {
@@ -238,23 +296,26 @@ private struct HourlyChangeBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: Spacing.xxs) {
+        HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.labelMedium)
+                .font(.system(size: prominent ? 14 : 11, weight: .bold))
 
             Text(Formatters.percentage(change))
-                .font(.labelMedium)
-                .fontWeight(.bold)
+                .font(.system(size: prominent ? 15 : 12, weight: .bold))
 
-            Text("1h")
-                .font(.system(size: 9))
-                .opacity(0.8)
+            Text("1H")
+                .font(.system(size: prominent ? 10 : 9, weight: .semibold))
+                .opacity(0.9)
         }
         .foregroundColor(color)
-        .padding(.horizontal, Spacing.sm)
-        .padding(.vertical, Spacing.xxs)
+        .padding(.horizontal, prominent ? 10 : 8)
+        .padding(.vertical, prominent ? 6 : 4)
         .background(color.opacity(0.15))
-        .cornerRadius(Spacing.xs)
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 
@@ -262,12 +323,12 @@ private struct HourlyChangeBadge: View {
 
 #Preview {
     VStack(spacing: Spacing.md) {
-        // Super hot coin (>100% change)
+        // Extremely hot coin (>100% change)
         ViralCoinCard(
             coin: Coin(
                 id: "test1",
-                symbol: "VIRAL",
-                name: "Viral Coin",
+                symbol: "PEPE",
+                name: "Pepe",
                 image: nil,
                 currentPrice: 0.0001234,
                 priceChange24h: 0,
@@ -285,8 +346,8 @@ private struct HourlyChangeBadge: View {
         ViralCoinCard(
             coin: Coin(
                 id: "test2",
-                symbol: "MOON",
-                name: "To The Moon",
+                symbol: "WIF",
+                name: "Dogwifhat",
                 image: nil,
                 currentPrice: 0.00567,
                 priceChange24h: 0,
@@ -304,8 +365,8 @@ private struct HourlyChangeBadge: View {
         ViralCoinCard(
             coin: Coin(
                 id: "test3",
-                symbol: "PUMP",
-                name: "Pump It",
+                symbol: "BONK",
+                name: "Bonk",
                 image: nil,
                 currentPrice: 0.123,
                 priceChange24h: 0,

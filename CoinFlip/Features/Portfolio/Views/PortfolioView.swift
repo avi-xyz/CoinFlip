@@ -110,7 +110,12 @@ struct PortfolioView: View {
                                     marketCap: 0,
                                     sparklineIn7d: nil
                                 )
-                                let currentPrice = viewModel.currentPrices[holding.coinId] ?? holding.averageBuyPrice
+                                // Try coinId first, then symbol, then fallback to avgBuyPrice (treat $0 as "not found")
+                                let priceById = viewModel.currentPrices[holding.coinId]
+                                let priceBySymbol = viewModel.currentPrices[holding.coinSymbol.uppercased()]
+                                let currentPrice = (priceById != nil && priceById! > 0) ? priceById! :
+                                                  (priceBySymbol != nil && priceBySymbol! > 0) ? priceBySymbol! :
+                                                  holding.averageBuyPrice
 
                                 HoldingCard(
                                     holding: holding,
@@ -144,6 +149,18 @@ struct PortfolioView: View {
             }
             .background(Color.appBackground)
             .navigationTitle("Portfolio")
+            .toolbar {
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("🔧 Backfill") {
+                        Task {
+                            await viewModel.backfillChainIds()
+                        }
+                    }
+                    .font(.caption)
+                }
+                #endif
+            }
             .refreshable {
                 viewModel.refresh()
             }
@@ -160,7 +177,12 @@ struct PortfolioView: View {
                     marketCap: 0,
                     sparklineIn7d: nil
                 )
-                let currentPrice = viewModel.currentPrices[holding.coinId] ?? holding.averageBuyPrice
+                // Try coinId first, then symbol, then fallback to avgBuyPrice (treat $0 as "not found")
+                let priceById = viewModel.currentPrices[holding.coinId]
+                let priceBySymbol = viewModel.currentPrices[holding.coinSymbol.uppercased()]
+                let currentPrice = (priceById != nil && priceById! > 0) ? priceById! :
+                                  (priceBySymbol != nil && priceBySymbol! > 0) ? priceBySymbol! :
+                                  holding.averageBuyPrice
 
                 SellView(
                     holding: holding,
@@ -170,9 +192,17 @@ struct PortfolioView: View {
                     viewModel.sell(holding: holding, quantity: quantity)
                 }
                 .presentationDetents([.large])
+                .task {
+                    // Refresh price when opening sell sheet (5-minute cache)
+                    await viewModel.refreshPrice(for: holding.coinId)
+                }
             }
             .onAppear {
                 viewModel.loadData()
+                // Fetch missing prices for held coins
+                Task {
+                    await viewModel.fetchMissingPricesForHoldings()
+                }
             }
         }
     }

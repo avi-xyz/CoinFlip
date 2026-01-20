@@ -16,6 +16,7 @@ class HomeViewModel: ObservableObject {
 
     private let cryptoAPI: CryptoAPIService
     private let dataService: DataServiceProtocol
+    private let viralAPI: GeckoTerminalService
     private let authService = AuthService.shared
     private let useMockData: Bool
     private var cancellables = Set<AnyCancellable>()
@@ -25,11 +26,12 @@ class HomeViewModel: ObservableObject {
     private let lastFeaturedCoinIdKey = "lastFeaturedCoinId"
     private let hasSkippedTodayKey = "hasSkippedToday"
 
-    init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, dataService: DataServiceProtocol = SupabaseDataService.shared, useMockData: Bool = false) {
+    init(portfolio: Portfolio, cryptoAPI: CryptoAPIService = .shared, dataService: DataServiceProtocol = SupabaseDataService.shared, viralAPI: GeckoTerminalService = .shared, useMockData: Bool = false) {
         self.portfolio = portfolio
         self.netWorth = portfolio.cashBalance
         self.cryptoAPI = cryptoAPI
         self.dataService = dataService
+        self.viralAPI = viralAPI
         self.useMockData = useMockData
 
         // Observe currentUser changes and reload portfolio
@@ -70,7 +72,7 @@ class HomeViewModel: ObservableObject {
             print("✅ HomeViewModel: Loaded portfolio with \(fetchedPortfolio.holdings.count) holdings, cash: $\(fetchedPortfolio.cashBalance)")
 
             // Calculate metrics to include holdings in net worth
-            calculatePortfolioMetrics()
+            await calculatePortfolioMetrics()
             print("   💰 Net worth after calculation: $\(netWorth)")
         } catch {
             print("❌ HomeViewModel: Failed to load portfolio - \(error.localizedDescription)")
@@ -108,7 +110,7 @@ class HomeViewModel: ObservableObject {
             self.trendingCoins = coins
             self.featuredCoin = selectFeaturedCoin(from: coins)
             updatePrices()
-            calculatePortfolioMetrics()
+            await calculatePortfolioMetrics()
 
             print("✅ HomeViewModel: Loaded \(coins.count) coins")
         } catch {
@@ -130,7 +132,9 @@ class HomeViewModel: ObservableObject {
             self.trendingCoins = MockData.coins
             self.featuredCoin = self.selectFeaturedCoin(from: MockData.coins)
             self.updatePrices()
-            self.calculatePortfolioMetrics()
+            Task {
+                await self.calculatePortfolioMetrics()
+            }
             self.isLoading = false
         }
     }
@@ -142,21 +146,128 @@ class HomeViewModel: ObservableObject {
     }
 
     private func updatePrices() {
-        for coin in trendingCoins { currentPrices[coin.id] = coin.currentPrice }
+        for coin in trendingCoins {
+            currentPrices[coin.id] = coin.currentPrice
+
+            // CRITICAL: For viral coins, ALSO store by symbol so holdings can find them
+            // Viral coins use contract addresses as IDs which CoinGecko doesn't know
+            if coin.isViral {
+                currentPrices[coin.symbol.uppercased()] = coin.currentPrice
+                print("   💾 Viral coin price stored: ID='\(coin.id)' AND symbol='\(coin.symbol)' = $\(coin.currentPrice)")
+            }
+        }
     }
 
-    func calculatePortfolioMetrics() {
+    func calculatePortfolioMetrics() async {
+        await fetchMissingPricesForHoldings()
+        await calculateMetrics()
+    }
+
+    /// Fetch prices for any held coins not in currentPrices or priced at $0
+    private func fetchMissingPricesForHoldings() async {
+        // Find coins in holdings that don't have current prices or have $0 prices
+        let missingHoldings = portfolio.holdings.filter {
+            let price = currentPrices[$0.coinId]
+            return price == nil || price == 0.0
+        }
+
+        guard !missingHoldings.isEmpty else {
+            print("   ✅ All holding prices already available")
+            return
+        }
+
+        print("   🔍 Fetching prices for \(missingHoldings.count) held coins not in trending lists...")
+
+        // Step 1: Check GeckoTerminal cache for viral coins (by symbol)
+        let viralPrices = viralAPI.getCachedPrices(forSymbols: missingHoldings.map { $0.coinSymbol })
+
+        var foundCount = 0
+        for holding in missingHoldings {
+            if let price = viralPrices[holding.coinSymbol] {
+                currentPrices[holding.coinId] = price
+                print("   ✅ Found viral coin price for \(holding.coinSymbol): $\(price)")
+                foundCount += 1
+            }
+        }
+
+        // Step 2: Try fetching viral coins by chainId + address from GeckoTerminal
+        let stillMissing = missingHoldings.filter { currentPrices[$0.coinId] == nil }
+        let viralHoldingsWithChain = stillMissing.filter { $0.chainId != nil }
+
+        for holding in viralHoldingsWithChain {
+            guard let chainId = holding.chainId else { continue }
+
+            do {
+                print("   🔗 Fetching viral coin price from GeckoTerminal: \(holding.coinSymbol) on \(chainId)")
+                let price = try await viralAPI.fetchTokenPrice(network: chainId, address: holding.coinId)
+                currentPrices[holding.coinId] = price
+                currentPrices[holding.coinSymbol.uppercased()] = price
+                print("   ✅ Found viral coin price via direct lookup: \(holding.coinSymbol) = $\(price)")
+            } catch {
+                print("   ⚠️ Failed to fetch \(holding.coinSymbol) from GeckoTerminal: \(error.localizedDescription)")
+                // Will try CoinGecko next
+            }
+        }
+
+        // Step 3: Fetch remaining coins from CoinGecko API
+        let stillMissing2 = missingHoldings.filter { currentPrices[$0.coinId] == nil }
+
+        guard !stillMissing2.isEmpty else {
+            print("   ✅ All prices found (viral cache + GeckoTerminal)")
+            return
+        }
+
+        print("   🌐 Fetching \(stillMissing2.count) prices from CoinGecko API...")
+
+        do {
+            let missingCoinIds = stillMissing2.map { $0.coinId }
+            let fetchedPrices = try await cryptoAPI.fetchPrices(for: missingCoinIds)
+
+            // Mark coins that we tried to fetch but didn't get a price as $0
+            for holding in stillMissing2 {
+                if let price = fetchedPrices[holding.coinId] {
+                    currentPrices[holding.coinId] = price
+                    print("   ✅ Updated price for \(holding.coinSymbol): $\(price)")
+                } else {
+                    // Price unavailable - set to $0 to indicate failure
+                    currentPrices[holding.coinId] = 0.0
+                    print("   ⚠️ Price unavailable for \(holding.coinSymbol) - set to $0")
+                }
+            }
+        } catch {
+            print("   ❌ Failed to fetch held coin prices: \(error.localizedDescription)")
+            // Set all missing coins to $0 to indicate price unavailable
+            for holding in stillMissing2 {
+                if currentPrices[holding.coinId] == nil {
+                    currentPrices[holding.coinId] = 0.0
+                    print("   ⚠️ Price unavailable for \(holding.coinSymbol) - set to $0")
+                }
+            }
+        }
+    }
+
+    /// Calculate portfolio metrics using current prices
+    private func calculateMetrics() async {
         print("🧮 Calculating portfolio metrics...")
         print("   💵 Cash balance: $\(portfolio.cashBalance)")
         print("   📊 Holdings count: \(portfolio.holdings.count)")
 
         let holdingsValue = portfolio.holdings.reduce(0) { total, holding in
-            guard let currentPrice = currentPrices[holding.coinId] else {
-                print("   ⚠️ No current price for \(holding.coinId), using avg buy price: $\(holding.averageBuyPrice)")
-                return total + (holding.quantity * holding.averageBuyPrice)
-            }
+            // Try coinId first, then symbol, then fallback to averageBuyPrice
+            let priceById = currentPrices[holding.coinId]
+            let priceBySymbol = currentPrices[holding.coinSymbol.uppercased()]
+            let currentPrice = (priceById != nil && priceById! > 0) ? priceById! :
+                              (priceBySymbol != nil && priceBySymbol! > 0) ? priceBySymbol! :
+                              holding.averageBuyPrice
+
             let value = holding.quantity * currentPrice
-            print("   📈 \(holding.coinSymbol): qty=\(holding.quantity), price=$\(currentPrice), value=$\(value), avgBuyPrice=$\(holding.averageBuyPrice)")
+
+            if currentPrice == holding.averageBuyPrice {
+                print("   ⚠️ No current price for \(holding.coinSymbol), using avg buy price: $\(holding.averageBuyPrice)")
+            } else {
+                print("   📈 \(holding.coinSymbol): qty=\(holding.quantity), price=$\(currentPrice), value=$\(value), avgBuyPrice=$\(holding.averageBuyPrice)")
+            }
+
             return total + value
         }
 
@@ -165,7 +276,13 @@ class HomeViewModel: ObservableObject {
         print("   💰 Net worth: $\(netWorth)")
 
         dailyChange = portfolio.holdings.reduce(0) { total, holding in
-            guard let currentPrice = currentPrices[holding.coinId] else { return total }
+            // Try coinId first, then symbol, then fallback to averageBuyPrice
+            let priceById = currentPrices[holding.coinId]
+            let priceBySymbol = currentPrices[holding.coinSymbol.uppercased()]
+            let currentPrice = (priceById != nil && priceById! > 0) ? priceById! :
+                              (priceBySymbol != nil && priceBySymbol! > 0) ? priceBySymbol! :
+                              holding.averageBuyPrice
+
             let currentValue = holding.quantity * currentPrice
             let costBasis = holding.quantity * holding.averageBuyPrice
             return total + (currentValue - costBasis)
@@ -287,7 +404,16 @@ class HomeViewModel: ObservableObject {
         // Update local state first
         portfolio = updatedPortfolio
         currentPrices[coin.id] = coin.currentPrice
-        calculatePortfolioMetrics()
+
+        // IMPORTANT: For viral coins, ALSO store price by symbol (holdings use symbol as fallback)
+        if coin.isViral {
+            currentPrices[coin.symbol.uppercased()] = coin.currentPrice
+            print("🔥 HomeViewModel: Caching viral coin price by ID '\(coin.id)' AND symbol '\(coin.symbol)' = $\(coin.currentPrice)")
+        }
+
+        Task {
+            await calculatePortfolioMetrics()
+        }
 
         // Persist to Supabase in background
         Task {

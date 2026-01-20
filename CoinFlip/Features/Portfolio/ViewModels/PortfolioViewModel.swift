@@ -10,6 +10,8 @@ class PortfolioViewModel: ObservableObject {
     @Published var isLoading = false
 
     private let dataService: DataServiceProtocol
+    private let cryptoAPI: CryptoAPIService
+    private let viralAPI: GeckoTerminalService
 
     var holdings: [Holding] {
         portfolio.holdings.filter { $0.quantity > 0.00000001 }
@@ -21,16 +23,34 @@ class PortfolioViewModel: ObservableObject {
 
     var totalHoldingsValue: Double {
         let value = holdings.reduce(0) { total, holding in
-            let price = currentPrices[holding.coinId] ?? holding.averageBuyPrice
+            let price = getPrice(for: holding)
             return total + (holding.quantity * price)
         }
         print("💎 PortfolioViewModel.totalHoldingsValue: $\(value)")
         print("   Holdings count: \(holdings.count)")
         for holding in holdings {
-            let price = currentPrices[holding.coinId] ?? holding.averageBuyPrice
+            let price = getPrice(for: holding)
             print("   - \(holding.coinSymbol): qty=\(holding.quantity), price=$\(price), value=$\(holding.quantity * price)")
         }
         return value
+    }
+
+    /// Get price for a holding, trying coinId first, then symbol, then averageBuyPrice
+    private func getPrice(for holding: Holding) -> Double {
+        // Try 1: Look up by coinId (works for standard coins and stored viral coins)
+        if let price = currentPrices[holding.coinId], price > 0 {
+            return price
+        }
+
+        // Try 2: Look up by symbol (fallback for viral coins stored by symbol)
+        if let price = currentPrices[holding.coinSymbol.uppercased()], price > 0 {
+            print("   🔍 Found price via symbol fallback: \(holding.coinSymbol) = $\(price)")
+            return price
+        }
+
+        // Try 3: Use average buy price as last resort (for coins with no current price data)
+        print("   ⚠️ No current price for \(holding.coinSymbol), using avgBuyPrice: $\(holding.averageBuyPrice)")
+        return holding.averageBuyPrice
     }
 
     var totalCostBasis: Double {
@@ -52,10 +72,12 @@ class PortfolioViewModel: ObservableObject {
         totalProfitLoss >= 0
     }
 
-    init(portfolio: Portfolio, coins: [Coin], dataService: DataServiceProtocol = SupabaseDataService.shared) {
+    init(portfolio: Portfolio, coins: [Coin], dataService: DataServiceProtocol = SupabaseDataService.shared, cryptoAPI: CryptoAPIService = .shared, viralAPI: GeckoTerminalService = .shared) {
         self.portfolio = portfolio
         self.coins = coins
         self.dataService = dataService
+        self.cryptoAPI = cryptoAPI
+        self.viralAPI = viralAPI
         updatePrices()
     }
 
@@ -70,6 +92,199 @@ class PortfolioViewModel: ObservableObject {
 
     func refresh() {
         loadData()
+    }
+
+    /// Refresh price for a specific coin (called when opening sell sheet)
+    func refreshPrice(for coinId: String) async {
+        print("💰 PortfolioViewModel: Refreshing price for \(coinId)...")
+
+        // Find the holding to get its symbol
+        guard let holding = holdings.first(where: { $0.coinId == coinId }) else {
+            print("   ⚠️ Holding not found for \(coinId)")
+            currentPrices[coinId] = 0.0
+            return
+        }
+
+        // Step 1: Check GeckoTerminal cache (for viral coins)
+        if let viralPrice = viralAPI.getCachedPrice(forSymbol: holding.coinSymbol) {
+            currentPrices[coinId] = viralPrice
+            currentPrices[holding.coinSymbol.uppercased()] = viralPrice
+            print("   ✅ Found viral coin price for \(holding.coinSymbol): $\(viralPrice)")
+            return
+        }
+
+        // Step 2: If viral coin with chainId, try fetching from GeckoTerminal by address
+        if let chainId = holding.chainId {
+            do {
+                print("   🔗 Trying GeckoTerminal direct lookup for \(holding.coinSymbol) on \(chainId)")
+                let price = try await viralAPI.fetchTokenPrice(network: chainId, address: coinId)
+                currentPrices[coinId] = price
+                currentPrices[holding.coinSymbol.uppercased()] = price
+                print("   ✅ Found viral coin price via direct lookup: \(holding.coinSymbol) = $\(price)")
+                return
+            } catch {
+                print("   ⚠️ GeckoTerminal lookup failed: \(error.localizedDescription)")
+                // Will try CoinGecko next
+            }
+        }
+
+        // Step 3: Fetch from CoinGecko API (for well-known coins)
+        do {
+            let prices = try await cryptoAPI.fetchPrices(for: [coinId])
+            if let price = prices[coinId] {
+                currentPrices[coinId] = price
+                print("   ✅ Updated price for \(coinId): $\(price)")
+            } else {
+                // Price unavailable - set to $0
+                currentPrices[coinId] = 0.0
+                print("   ⚠️ Price unavailable for \(coinId) - set to $0")
+            }
+        } catch {
+            print("   ❌ Failed to fetch price for \(coinId): \(error.localizedDescription)")
+            // Price unavailable - set to $0
+            currentPrices[coinId] = 0.0
+            print("   ⚠️ Price unavailable for \(coinId) - set to $0")
+        }
+    }
+
+    /// Fetch prices for any held coins not in currentPrices or priced at $0
+    func fetchMissingPricesForHoldings() async {
+        let missingHoldings = holdings.filter {
+            let price = currentPrices[$0.coinId]
+            return price == nil || price == 0.0
+        }
+
+        guard !missingHoldings.isEmpty else { return }
+
+        print("   🔍 PortfolioViewModel: Fetching prices for \(missingHoldings.count) held coins...")
+
+        // Step 1: Check GeckoTerminal cache for viral coins (by symbol)
+        let viralPrices = viralAPI.getCachedPrices(forSymbols: missingHoldings.map { $0.coinSymbol })
+
+        var foundCount = 0
+        for holding in missingHoldings {
+            if let price = viralPrices[holding.coinSymbol] {
+                // Store by BOTH coinId (contract address) AND symbol for future lookups
+                currentPrices[holding.coinId] = price
+                currentPrices[holding.coinSymbol.uppercased()] = price
+                print("   ✅ Found viral coin price for \(holding.coinSymbol) (ID: \(holding.coinId)): $\(price)")
+                foundCount += 1
+            }
+        }
+
+        // Step 2: Try fetching viral coins by chainId + address from GeckoTerminal
+        let stillMissing = missingHoldings.filter { currentPrices[$0.coinId] == nil }
+        let viralHoldingsWithChain = stillMissing.filter { $0.chainId != nil }
+
+        for holding in viralHoldingsWithChain {
+            guard let chainId = holding.chainId else { continue }
+
+            do {
+                print("   🔗 Fetching viral coin price from GeckoTerminal: \(holding.coinSymbol) on \(chainId)")
+                let price = try await viralAPI.fetchTokenPrice(network: chainId, address: holding.coinId)
+                currentPrices[holding.coinId] = price
+                currentPrices[holding.coinSymbol.uppercased()] = price
+                print("   ✅ Found viral coin price via direct lookup: \(holding.coinSymbol) = $\(price)")
+            } catch {
+                print("   ⚠️ Failed to fetch \(holding.coinSymbol) from GeckoTerminal: \(error.localizedDescription)")
+                // Will try CoinGecko next
+            }
+        }
+
+        // Step 3: Fetch remaining coins from CoinGecko API
+        let stillMissing2 = missingHoldings.filter { currentPrices[$0.coinId] == nil }
+
+        guard !stillMissing2.isEmpty else {
+            print("   ✅ All prices found (viral cache + GeckoTerminal)")
+            return
+        }
+
+        print("   🌐 Fetching \(stillMissing2.count) prices from CoinGecko API...")
+
+        do {
+            let missingCoinIds = stillMissing2.map { $0.coinId }
+            let fetchedPrices = try await cryptoAPI.fetchPrices(for: missingCoinIds)
+
+            // Mark coins that we tried to fetch but didn't get a price as $0
+            for holding in stillMissing2 {
+                if let price = fetchedPrices[holding.coinId] {
+                    currentPrices[holding.coinId] = price
+                    print("   ✅ Updated price for \(holding.coinSymbol): $\(price)")
+                } else {
+                    // Price unavailable - set to $0
+                    currentPrices[holding.coinId] = 0.0
+                    print("   ⚠️ Price unavailable for \(holding.coinSymbol) - set to $0")
+                }
+            }
+        } catch {
+            print("   ❌ Failed to fetch prices: \(error.localizedDescription)")
+            // Set all missing coins to $0 to indicate price unavailable
+            for holding in stillMissing2 {
+                if currentPrices[holding.coinId] == nil {
+                    currentPrices[holding.coinId] = 0.0
+                    print("   ⚠️ Price unavailable for \(holding.coinSymbol) - set to $0")
+                }
+            }
+        }
+    }
+
+    /// Backfill chainId for holdings that don't have it (legacy holdings)
+    /// Tries to find the token on common chains and updates the holding
+    func backfillChainIds() async {
+        let holdingsWithoutChain = holdings.filter { $0.chainId == nil }
+
+        guard !holdingsWithoutChain.isEmpty else {
+            print("✅ All holdings have chainId")
+            return
+        }
+
+        print("🔄 Backfilling chainId for \(holdingsWithoutChain.count) holdings...")
+
+        // Common chains to try, in order of popularity
+        let commonChains = ["solana", "eth", "base", "bsc", "polygon", "arbitrum"]
+
+        for holding in holdingsWithoutChain {
+            print("   🔍 Trying to find chain for \(holding.coinSymbol) (\(holding.coinId))...")
+
+            var foundChainId: String?
+
+            // Try each chain until we find the token
+            for chainId in commonChains {
+                do {
+                    let price = try await viralAPI.fetchTokenPrice(network: chainId, address: holding.coinId)
+                    print("   ✅ Found \(holding.coinSymbol) on \(chainId) with price $\(price)")
+                    foundChainId = chainId
+
+                    // Cache the price while we're at it
+                    currentPrices[holding.coinId] = price
+                    currentPrices[holding.coinSymbol.uppercased()] = price
+
+                    break
+                } catch {
+                    // Token not on this chain, try next
+                    continue
+                }
+            }
+
+            if let chainId = foundChainId {
+                // Update the holding in the database with the discovered chainId
+                await updateHoldingChainId(holdingId: holding.id, chainId: chainId)
+            } else {
+                print("   ⚠️ Could not find \(holding.coinSymbol) on any common chain")
+            }
+        }
+
+        print("✅ Backfill complete")
+    }
+
+    /// Update a holding's chainId in the database
+    private func updateHoldingChainId(holdingId: UUID, chainId: String) async {
+        do {
+            print("   💾 Updating holding \(holdingId) with chainId: \(chainId)")
+            try await dataService.updateHoldingChainId(holdingId: holdingId, chainId: chainId)
+        } catch {
+            print("   ❌ Failed to update holding chainId: \(error.localizedDescription)")
+        }
     }
 
     private func updatePrices() {
@@ -94,12 +309,19 @@ class PortfolioViewModel: ObservableObject {
         print("   🆔 Holding ID: \(holdingId)")
 
         // Use real-time coin data if available, fallback to holding data
+        // CRITICAL: Check for $0 prices and fall back to averageBuyPrice
+        let priceById = currentPrices[holding.coinId]
+        let priceBySymbol = currentPrices[holding.coinSymbol.uppercased()]
+        let sellPrice = (priceById != nil && priceById! > 0) ? priceById! :
+                       (priceBySymbol != nil && priceBySymbol! > 0) ? priceBySymbol! :
+                       holding.averageBuyPrice
+
         let coin = coins.first(where: { $0.id == holding.coinId }) ?? Coin(
             id: holding.coinId,
             symbol: holding.coinSymbol,
             name: holding.coinName,
             image: holding.coinImage,
-            currentPrice: currentPrices[holding.coinId] ?? holding.averageBuyPrice,
+            currentPrice: sellPrice,
             priceChange24h: 0,
             priceChangePercentage24h: 0,
             marketCap: 0,

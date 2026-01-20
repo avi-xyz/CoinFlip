@@ -29,6 +29,10 @@ class CryptoAPIService {
     private var lastFetchTime: Date?
     private let cacheValidDuration: TimeInterval = 60 // 60 seconds
 
+    // Price cache with 5-minute TTL
+    private var priceCache: [String: (price: Double, timestamp: Date)] = [:]
+    private let priceCacheDuration: TimeInterval = 300 // 5 minutes
+
     // MARK: - Initialization
 
     private init() {
@@ -198,12 +202,55 @@ class CryptoAPIService {
         return price
     }
 
-    /// Get current prices for multiple coins
+    /// Get current prices for multiple coins (with 5-minute cache)
     ///
     /// - Parameter coinIds: Array of CoinGecko coin IDs
     /// - Returns: Dictionary mapping coin ID to current price
     func fetchPrices(for coinIds: [String]) async throws -> [String: Double] {
-        let idsString = coinIds.joined(separator: ",")
+        guard !coinIds.isEmpty else { return [:] }
+
+        print("💰 CryptoAPIService: Fetching prices for \(coinIds.count) coins...")
+
+        // Check cache first
+        var prices: [String: Double] = [:]
+        var coinsToFetch: [String] = []
+        let now = Date()
+
+        for coinId in coinIds {
+            if let cached = priceCache[coinId],
+               now.timeIntervalSince(cached.timestamp) < priceCacheDuration {
+                // Use cached price
+                prices[coinId] = cached.price
+                print("   ✅ Using cached price for \(coinId): $\(cached.price)")
+            } else {
+                // Need to fetch
+                coinsToFetch.append(coinId)
+            }
+        }
+
+        // If all prices are cached, return immediately
+        if coinsToFetch.isEmpty {
+            print("   ✅ All prices from cache")
+            return prices
+        }
+
+        print("   🌐 Fetching \(coinsToFetch.count) prices from API...")
+
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - returning cached prices only")
+            // Return what we have in cache, even if stale
+            for coinId in coinsToFetch {
+                if let cached = priceCache[coinId] {
+                    prices[coinId] = cached.price
+                    print("   ⚠️ Using stale cached price for \(coinId): $\(cached.price)")
+                }
+            }
+            return prices
+        }
+
+        // Fetch missing prices from API
+        let idsString = coinsToFetch.joined(separator: ",")
 
         let endpoint = "\(baseURL)/simple/price"
         var components = URLComponents(string: endpoint)!
@@ -218,19 +265,29 @@ class CryptoAPIService {
 
         let (data, response) = try await session.data(from: url)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw CryptoAPIError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 429 {
+                throw CryptoAPIError.rateLimitExceeded
+            }
+            throw CryptoAPIError.httpError(httpResponse.statusCode)
         }
 
         let priceResponse = try JSONDecoder().decode([String: [String: Double]].self, from: data)
 
-        var prices: [String: Double] = [:]
+        // Update cache and prices dictionary
         for (coinId, currencies) in priceResponse {
             if let usdPrice = currencies["usd"] {
                 prices[coinId] = usdPrice
+                priceCache[coinId] = (price: usdPrice, timestamp: now)
+                print("   ✅ Fetched price for \(coinId): $\(usdPrice)")
             }
         }
 
+        print("   ✅ Total prices returned: \(prices.count)")
         return prices
     }
 
@@ -238,6 +295,7 @@ class CryptoAPIService {
     func clearCache() {
         cachedCoins = []
         lastFetchTime = nil
+        priceCache = [:]
         print("🗑️ CryptoAPIService: Cache cleared")
     }
 }

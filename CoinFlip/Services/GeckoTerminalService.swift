@@ -109,7 +109,10 @@ class GeckoTerminalService {
         }
 
         // Convert to our Coin model and apply viral filtering
-        let allCoins = poolsResponse.data.compactMap { $0.toCoin() }
+        var allCoins = poolsResponse.data.compactMap { $0.toCoin() }
+
+        // Fetch coin images from CoinGecko (best effort, don't fail if unavailable)
+        await enrichCoinsWithImages(&allCoins)
 
         // Filter for viral coins based on criteria
         let viralCoins = filterViralCoins(from: allCoins)
@@ -123,6 +126,72 @@ class GeckoTerminalService {
 
         print("   ✅ Fetched \(allCoins.count) pools, filtered to \(sortedCoins.count) viral coins")
         return Array(sortedCoins.prefix(limit))
+    }
+
+    /// Enrich coins with images from CoinGecko search API
+    private func enrichCoinsWithImages(_ coins: inout [Coin]) async {
+        print("   🖼️  Fetching coin images from CoinGecko...")
+
+        // Process in batches to avoid rate limiting
+        for (index, coin) in coins.enumerated() {
+            guard let imageURL = await fetchCoinImageFromCoinGecko(symbol: coin.symbol) else {
+                continue
+            }
+
+            // Update coin with image URL
+            coins[index] = Coin(
+                id: coin.id,
+                symbol: coin.symbol,
+                name: coin.name,
+                image: imageURL,
+                currentPrice: coin.currentPrice,
+                priceChange24h: coin.priceChange24h,
+                priceChangePercentage24h: coin.priceChangePercentage24h,
+                marketCap: coin.marketCap,
+                sparklineIn7d: coin.sparklineIn7d,
+                poolCreatedAt: coin.poolCreatedAt,
+                priceChangeH1: coin.priceChangeH1,
+                hourlyBuys: coin.hourlyBuys,
+                hourlySells: coin.hourlySells,
+                txnsH1: coin.txnsH1,
+                volumeH1: coin.volumeH1,
+                chainId: coin.chainId,
+                isViral: coin.isViral
+            )
+
+            // Small delay to respect rate limits (10-30 calls/min on free tier)
+            if index < coins.count - 1 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+            }
+        }
+
+        let imagesFound = coins.filter { $0.image != nil }.count
+        print("   ✅ Found images for \(imagesFound)/\(coins.count) coins")
+    }
+
+    /// Fetch coin image from CoinGecko search API
+    private func fetchCoinImageFromCoinGecko(symbol: String) async -> URL? {
+        let searchURL = "https://api.coingecko.com/api/v3/search?query=\(symbol)"
+
+        guard let url = URL(string: searchURL) else { return nil }
+
+        do {
+            let (data, _) = try await session.data(from: url)
+            let decoder = JSONDecoder()
+            let searchResult = try decoder.decode(CoinGeckoSearchResponse.self, from: data)
+
+            // Find exact symbol match (case-insensitive)
+            if let match = searchResult.coins.first(where: { $0.symbol.lowercased() == symbol.lowercased() }),
+               let imageURLString = match.large,
+               let imageURL = URL(string: imageURLString) {
+                return imageURL
+            }
+        } catch {
+            // Silently fail - images are best effort
+            return nil
+        }
+
+        return nil
     }
 
     // MARK: - Private Methods
@@ -168,6 +237,112 @@ class GeckoTerminalService {
         let volumeScore = (coin.volumeH1 ?? 0) / 10000 * 0.3
 
         return priceScore + txnScore + volumeScore
+    }
+
+    /// Get current price for a viral coin from cache by symbol
+    /// Returns nil if coin not in cache
+    func getCachedPrice(forSymbol symbol: String) -> Double? {
+        print("🔍 GeckoTerminalService.getCachedPrice for symbol: '\(symbol)'")
+        print("   Cache has \(cachedViralCoins.count) coins: \(cachedViralCoins.map { $0.symbol }.joined(separator: ", "))")
+
+        let matchingCoin = cachedViralCoins.first { $0.symbol.uppercased() == symbol.uppercased() }
+
+        if let coin = matchingCoin {
+            print("   ✅ Found match: \(coin.symbol) = $\(coin.currentPrice)")
+        } else {
+            print("   ❌ No match found for '\(symbol)'")
+        }
+
+        return matchingCoin?.currentPrice
+    }
+
+    /// Get current prices for multiple viral coins from cache
+    /// Returns dictionary of symbol -> price for coins found in cache
+    func getCachedPrices(forSymbols symbols: [String]) -> [String: Double] {
+        print("🔍 GeckoTerminalService.getCachedPrices for \(symbols.count) symbols")
+        var prices: [String: Double] = [:]
+
+        for symbol in symbols {
+            if let price = getCachedPrice(forSymbol: symbol) {
+                prices[symbol] = price
+            }
+        }
+
+        print("   Found \(prices.count) prices in viral cache")
+        return prices
+    }
+
+    /// Fetch current price for a specific token by network and contract address
+    ///
+    /// - Parameters:
+    ///   - network: Network identifier (e.g., "solana", "eth", "base")
+    ///   - address: Token contract address
+    /// - Returns: Current token price in USD
+    func fetchTokenPrice(network: String, address: String) async throws -> Double {
+        print("💰 GeckoTerminalService: Fetching price for token \(address) on \(network)...")
+
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   ❌ Offline - cannot fetch token price")
+            throw GeckoTerminalError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+            ]))
+        }
+
+        // Build URL for token endpoint
+        let endpoint = "\(baseURL)/networks/\(network)/tokens/\(address)"
+        guard let url = URL(string: endpoint) else {
+            throw GeckoTerminalError.invalidURL
+        }
+
+        print("   🌐 Fetching from: \(url)")
+
+        // Make request
+        let (data, response) = try await session.data(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GeckoTerminalError.invalidResponse
+        }
+
+        print("   📥 Response: HTTP \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 429 {
+                throw GeckoTerminalError.rateLimitExceeded
+            }
+            if httpResponse.statusCode == 404 {
+                throw GeckoTerminalError.poolNotFound
+            }
+            throw GeckoTerminalError.httpError(httpResponse.statusCode)
+        }
+
+        // Parse response
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let tokenResponse: GeckoTerminalTokenResponse
+        do {
+            tokenResponse = try decoder.decode(GeckoTerminalTokenResponse.self, from: data)
+        } catch {
+            print("   ❌ Decoding error: \(error)")
+            throw error
+        }
+
+        // Extract price from attributes
+        guard let priceString = tokenResponse.data.attributes.priceUsd,
+              let price = Double(priceString) else {
+            print("   ❌ Failed to parse price from response")
+            throw GeckoTerminalError.invalidResponse
+        }
+
+        print("   ✅ Fetched price: $\(price)")
+        return price
+    }
+
+    /// Remove a specific coin from the cache (for testing)
+    func removeCoinFromCache(symbol: String) {
+        cachedViralCoins.removeAll { $0.symbol.uppercased() == symbol.uppercased() }
+        print("🗑️ GeckoTerminalService: Removed \(symbol) from cache")
     }
 
     /// Clear cached data
@@ -269,7 +444,7 @@ private struct GeckoTerminalPool: Codable {
             id: attributes.address.lowercased(),
             symbol: symbol,
             name: tokenName,
-            image: nil, // GeckoTerminal doesn't provide images in trending endpoint
+            image: nil, // Will be enriched later from CoinGecko
             currentPrice: price,
             priceChange24h: price * (priceChange24h / 100), // Convert % to absolute
             priceChangePercentage24h: priceChange24h,
@@ -285,6 +460,40 @@ private struct GeckoTerminalPool: Codable {
             isViral: true
         )
     }
+}
+
+// MARK: - GeckoTerminal Token Response Models
+
+/// Response from GeckoTerminal /networks/{network}/tokens/{address} endpoint
+private struct GeckoTerminalTokenResponse: Codable {
+    let data: GeckoTerminalTokenData
+}
+
+private struct GeckoTerminalTokenData: Codable {
+    let id: String
+    let type: String
+    let attributes: TokenAttributes
+
+    struct TokenAttributes: Codable {
+        let address: String
+        let name: String
+        let symbol: String
+        let priceUsd: String?
+    }
+}
+
+// MARK: - CoinGecko Search Models
+
+/// Response from CoinGecko /search API
+private struct CoinGeckoSearchResponse: Codable {
+    let coins: [CoinGeckoSearchCoin]
+}
+
+private struct CoinGeckoSearchCoin: Codable {
+    let id: String
+    let name: String
+    let symbol: String
+    let large: String? // Large image URL
 }
 
 // MARK: - Errors
