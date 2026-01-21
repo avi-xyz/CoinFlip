@@ -102,6 +102,7 @@ Backend/functions/node_modules/
 
 # Supabase local development
 Backend/.supabase/
+Backend/supabase/.temp/
 
 # macOS
 .DS_Store
