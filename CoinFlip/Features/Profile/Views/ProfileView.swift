@@ -6,6 +6,7 @@ struct ProfileView: View {
     @State private var showAvatarPicker = false
     @State private var showUsernameEditor = false
     @State private var showNotificationSettings = false
+    @State private var showResetConfirmation = false
     @State private var previousAvatar: String = ""
 
     var body: some View {
@@ -58,6 +59,9 @@ struct ProfileView: View {
                             title: "Help & Support",
                             iconColor: .primaryPurple
                         ) {
+                            if let url = URL(string: "mailto:avinashgdn@gmail.com?subject=CoinFlip%20Support") {
+                                UIApplication.shared.open(url)
+                            }
                             HapticManager.shared.impact(.light)
                         }
 
@@ -66,6 +70,10 @@ struct ProfileView: View {
                             title: "Terms of Service",
                             iconColor: .textSecondary
                         ) {
+                            // TODO: Update this URL after hosting the policy documents
+                            if let url = URL(string: "https://YOUR_USERNAME.github.io/CoinFlip/terms-of-service.html") {
+                                UIApplication.shared.open(url)
+                            }
                             HapticManager.shared.impact(.light)
                         }
 
@@ -74,13 +82,17 @@ struct ProfileView: View {
                             title: "Privacy Policy",
                             iconColor: .textSecondary
                         ) {
+                            // TODO: Update this URL after hosting the policy documents
+                            if let url = URL(string: "https://YOUR_USERNAME.github.io/CoinFlip/privacy-policy.html") {
+                                UIApplication.shared.open(url)
+                            }
                             HapticManager.shared.impact(.light)
                         }
 
                         SettingsRow(
                             icon: "info.circle.fill",
                             title: "App Version",
-                            value: "1.0.0",
+                            value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0",
                             showChevron: false,
                             iconColor: .textMuted
                         ) {}
@@ -99,7 +111,7 @@ struct ProfileView: View {
                             subtitle: "Start over with $1,000",
                             iconColor: .primaryPurple
                         ) {
-                            viewModel.resetPortfolio()
+                            showResetConfirmation = true
                         }
                         .accessibilityIdentifier("resetPortfolioButton")
 
@@ -147,6 +159,14 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showNotificationSettings) {
                 NotificationSettingsView()
+            }
+            .alert("Reset Portfolio?", isPresented: $showResetConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Reset", role: .destructive) {
+                    viewModel.resetPortfolio()
+                }
+            } message: {
+                Text("This will delete all your holdings and transactions. You'll start fresh with $1,000. This cannot be undone.")
             }
             .onAppear {
                 previousAvatar = viewModel.avatarEmoji

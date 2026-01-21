@@ -30,6 +30,11 @@ class OnboardingViewModel: ObservableObject {
             emoji: "🏆",
             title: "Compete & Learn",
             subtitle: "Climb the leaderboard and master crypto trading strategies risk-free!"
+        ),
+        OnboardingPageData(
+            emoji: "⚠️",
+            title: "Important Disclaimer",
+            subtitle: "This app uses VIRTUAL money for educational purposes only. All trades are simulated. Not financial advice. Do not make real investment decisions based on this app."
         )
     ]
 
