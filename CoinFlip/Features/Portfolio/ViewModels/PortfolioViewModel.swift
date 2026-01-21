@@ -288,65 +288,6 @@ class PortfolioViewModel: ObservableObject {
         }
     }
 
-    /// Backfill chainId for holdings that don't have it (legacy holdings)
-    /// Tries to find the token on common chains and updates the holding
-    func backfillChainIds() async {
-        let holdingsWithoutChain = holdings.filter { $0.chainId == nil }
-
-        guard !holdingsWithoutChain.isEmpty else {
-            print("✅ All holdings have chainId")
-            return
-        }
-
-        print("🔄 Backfilling chainId for \(holdingsWithoutChain.count) holdings...")
-
-        // Common chains to try, in order of popularity
-        let commonChains = ["solana", "eth", "base", "bsc", "polygon", "arbitrum"]
-
-        for holding in holdingsWithoutChain {
-            print("   🔍 Trying to find chain for \(holding.coinSymbol) (\(holding.coinId))...")
-
-            var foundChainId: String?
-
-            // Try each chain until we find the token
-            for chainId in commonChains {
-                do {
-                    let price = try await viralAPI.fetchTokenPrice(network: chainId, address: holding.coinId)
-                    print("   ✅ Found \(holding.coinSymbol) on \(chainId) with price $\(price)")
-                    foundChainId = chainId
-
-                    // Cache the price while we're at it
-                    currentPrices[holding.coinId] = price
-                    currentPrices[holding.coinSymbol.uppercased()] = price
-
-                    break
-                } catch {
-                    // Token not on this chain, try next
-                    continue
-                }
-            }
-
-            if let chainId = foundChainId {
-                // Update the holding in the database with the discovered chainId
-                await updateHoldingChainId(holdingId: holding.id, chainId: chainId)
-            } else {
-                print("   ⚠️ Could not find \(holding.coinSymbol) on any common chain")
-            }
-        }
-
-        print("✅ Backfill complete")
-    }
-
-    /// Update a holding's chainId in the database
-    private func updateHoldingChainId(holdingId: UUID, chainId: String) async {
-        do {
-            print("   💾 Updating holding \(holdingId) with chainId: \(chainId)")
-            try await dataService.updateHoldingChainId(holdingId: holdingId, chainId: chainId)
-        } catch {
-            print("   ❌ Failed to update holding chainId: \(error.localizedDescription)")
-        }
-    }
-
     private func updatePrices() {
         for coin in coins {
             currentPrices[coin.id] = coin.currentPrice

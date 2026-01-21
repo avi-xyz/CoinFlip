@@ -154,18 +154,6 @@ class MockDataService: DataServiceProtocol {
         holdings.removeAll()
     }
 
-    func updateHoldingChainId(holdingId: UUID, chainId: String) async throws {
-        try await Task.sleep(nanoseconds: 200_000_000)
-
-        guard let index = holdings.firstIndex(where: { $0.id == holdingId }) else {
-            throw DataServiceError.holdingNotFound
-        }
-
-        // Note: Since Holding is a struct, we can't directly modify the chainId
-        // In mock mode, this is a no-op as we don't persist data
-        print("MockDataService: Updated holding \(holdingId) with chainId: \(chainId)")
-    }
-
     // MARK: - Transaction Operations
 
     func fetchTransactions(portfolioId: UUID, limit: Int = 100) async throws -> [Transaction] {

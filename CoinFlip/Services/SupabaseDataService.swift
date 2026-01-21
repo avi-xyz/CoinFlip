@@ -595,38 +595,6 @@ class SupabaseDataService: DataServiceProtocol {
         print("   ✅ All holdings deleted")
     }
 
-    func updateHoldingChainId(holdingId: UUID, chainId: String) async throws {
-        print("🔗 SupabaseDataService: Updating chainId for holding \(holdingId) to \(chainId)")
-
-        let updateData: [String: Any] = [
-            "chain_id": chainId,
-            "updated_at": ISO8601DateFormatter().string(from: Date())
-        ]
-
-        let updateJSON = try JSONSerialization.data(withJSONObject: updateData)
-
-        let session = try await supabase.auth.session
-        let supabaseURL = EnvironmentConfig.supabaseURL
-        let url = URL(string: "\(supabaseURL)/rest/v1/holdings?id=eq.\(holdingId.uuidString.lowercased())")!
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "PATCH"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(EnvironmentConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-        request.setValue("bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = updateJSON
-
-        let (_, httpResponse) = try await URLSession.shared.data(for: request)
-        let statusCode = (httpResponse as? HTTPURLResponse)?.statusCode ?? 0
-
-        if statusCode == 200 || statusCode == 204 {
-            print("   ✅ ChainId updated successfully")
-        } else {
-            print("   ❌ Failed to update chainId: HTTP \(statusCode)")
-            throw DataServiceError.invalidData
-        }
-    }
-
     // MARK: - Transaction Operations
 
     func fetchTransactions(portfolioId: UUID, limit: Int = 100) async throws -> [Transaction] {

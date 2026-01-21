@@ -149,18 +149,6 @@ struct PortfolioView: View {
             }
             .background(Color.appBackground)
             .navigationTitle("Portfolio")
-            .toolbar {
-                #if DEBUG
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("🔧 Backfill") {
-                        Task {
-                            await viewModel.backfillChainIds()
-                        }
-                    }
-                    .font(.caption)
-                }
-                #endif
-            }
             .refreshable {
                 viewModel.refresh()
             }
