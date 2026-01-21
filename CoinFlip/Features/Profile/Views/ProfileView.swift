@@ -71,7 +71,7 @@ struct ProfileView: View {
                             iconColor: .textSecondary
                         ) {
                             // TODO: Update this URL after hosting the policy documents
-                            if let url = URL(string: "https://YOUR_USERNAME.github.io/CoinFlip/terms-of-service.html") {
+                            if let url = URL(string: "https://avi-xyz.github.io/CoinFlip/terms-of-service.html") {
                                 UIApplication.shared.open(url)
                             }
                             HapticManager.shared.impact(.light)
@@ -83,7 +83,7 @@ struct ProfileView: View {
                             iconColor: .textSecondary
                         ) {
                             // TODO: Update this URL after hosting the policy documents
-                            if let url = URL(string: "https://YOUR_USERNAME.github.io/CoinFlip/privacy-policy.html") {
+                            if let url = URL(string: "https://avi-xyz.github.io/CoinFlip/privacy-policy.html") {
                                 UIApplication.shared.open(url)
                             }
                             HapticManager.shared.impact(.light)
