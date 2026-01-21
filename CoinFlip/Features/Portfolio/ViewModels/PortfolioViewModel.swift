@@ -174,6 +174,8 @@ class PortfolioViewModel: ObservableObject {
 
         // Step 2: Try fetching viral coins by chainId + address from GeckoTerminal
         let stillMissing = missingHoldings.filter { currentPrices[$0.coinId] == nil }
+
+        // Try holdings with chainId first
         let viralHoldingsWithChain = stillMissing.filter { $0.chainId != nil }
 
         for holding in viralHoldingsWithChain {
@@ -187,7 +189,65 @@ class PortfolioViewModel: ObservableObject {
                 print("   ✅ Found viral coin price via direct lookup: \(holding.coinSymbol) = $\(price)")
             } catch {
                 print("   ⚠️ Failed to fetch \(holding.coinSymbol) from GeckoTerminal: \(error.localizedDescription)")
-                // Will try CoinGecko next
+
+                // Fallback 1: Check viral cache (from trending/search)
+                if let cachedPrice = viralAPI.getCachedPrice(forSymbol: holding.coinSymbol), cachedPrice > 0 {
+                    currentPrices[holding.coinId] = cachedPrice
+                    currentPrices[holding.coinSymbol.uppercased()] = cachedPrice
+                    print("   💾 Found \(holding.coinSymbol) in viral cache: $\(cachedPrice)")
+                    continue // Found it, move to next holding
+                }
+
+                // Fallback 2: Try other popular chains (in case token is cross-chain or pool moved)
+                let otherChains = ["eth", "base", "bsc", "solana"].filter { $0 != chainId }
+                var foundOnOtherChain = false
+
+                for chain in otherChains {
+                    do {
+                        print("   🔄 Trying \(holding.coinSymbol) on \(chain)...")
+                        let price = try await viralAPI.fetchTokenPrice(network: chain, address: holding.coinId)
+                        if price > 0 {
+                            currentPrices[holding.coinId] = price
+                            currentPrices[holding.coinSymbol.uppercased()] = price
+                            print("   ✅ Found \(holding.coinSymbol) on \(chain): $\(price)")
+                            foundOnOtherChain = true
+                            break
+                        }
+                    } catch {
+                        continue // Try next chain
+                    }
+                }
+
+                if !foundOnOtherChain {
+                    print("   ⏭️  Will try CoinGecko for \(holding.coinSymbol)")
+                }
+            }
+        }
+
+        // Step 2b: For viral coins WITHOUT chainId, try common chains
+        let viralHoldingsWithoutChain = stillMissing.filter {
+            $0.chainId == nil && $0.coinId.count > 20 // Long ID = contract address
+        }
+
+        for holding in viralHoldingsWithoutChain {
+            // Try common chains in order of popularity
+            let chainsToTry = ["solana", "eth", "base", "bsc"]
+
+            for chain in chainsToTry {
+                do {
+                    print("   🔍 Trying \(holding.coinSymbol) on \(chain)...")
+                    let price = try await viralAPI.fetchTokenPrice(network: chain, address: holding.coinId)
+
+                    if price > 0 {
+                        currentPrices[holding.coinId] = price
+                        currentPrices[holding.coinSymbol.uppercased()] = price
+                        print("   ✅ Found viral coin price on \(chain): \(holding.coinSymbol) = $\(price)")
+                        break // Stop trying other chains
+                    }
+                } catch {
+                    // Try next chain
+                    continue
+                }
             }
         }
 

@@ -49,6 +49,13 @@ protocol DataServiceProtocol {
     /// - Returns: The created portfolio
     func createPortfolio(userId: UUID, startingBalance: Double) async throws -> Portfolio
 
+    /// Updates portfolio net worth and gain percentage (for leaderboard accuracy)
+    /// - Parameters:
+    ///   - portfolioId: The portfolio's ID
+    ///   - netWorth: Current net worth (cash + holdings value)
+    ///   - gainPercentage: Gain/loss percentage since starting balance
+    func updatePortfolioNetWorth(portfolioId: UUID, netWorth: Double, gainPercentage: Double) async throws
+
     // MARK: - Holdings Operations
 
     /// Fetches all holdings for a portfolio

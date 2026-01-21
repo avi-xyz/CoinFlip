@@ -415,6 +415,34 @@ class SupabaseDataService: DataServiceProtocol {
         return createdPortfolio
     }
 
+    func updatePortfolioNetWorth(portfolioId: UUID, netWorth: Double, gainPercentage: Double) async throws {
+        print("💰 Updating net worth for portfolio: \(portfolioId)")
+        print("   Net Worth: $\(netWorth)")
+        print("   Gain: \(gainPercentage)%")
+
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            print("   📵 Offline - skipping net worth update")
+            return // Silently skip when offline
+        }
+
+        do {
+            try await supabase.database
+                .from("portfolios")
+                .update([
+                    "net_worth": netWorth,
+                    "gain_percentage": gainPercentage
+                ])
+                .eq("id", value: portfolioId.uuidString)
+                .execute()
+
+            print("✅ Net worth updated successfully")
+        } catch {
+            print("⚠️ Failed to update net worth: \(error)")
+            // Don't throw - this is a background optimization, not critical
+        }
+    }
+
     // MARK: - Holdings Operations
 
     func fetchHoldings(portfolioId: UUID) async throws -> [Holding] {

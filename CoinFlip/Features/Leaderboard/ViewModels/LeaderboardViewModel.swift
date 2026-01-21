@@ -11,6 +11,7 @@ class LeaderboardViewModel: ObservableObject {
     private let dataService: DataServiceProtocol
     private var currentUserNetWorth: Double = 1000
     private var currentUserGain: Double = 0
+    private var portfolioId: UUID?
 
     init(dataService: DataServiceProtocol? = nil, currentUserNetWorth: Double = 1000, currentUserGain: Double = 0) {
         self.dataService = dataService ?? DataServiceFactory.shared
@@ -26,6 +27,26 @@ class LeaderboardViewModel: ObservableObject {
         isLoading = true
 
         do {
+            // Update current user's net worth in database before fetching leaderboard
+            // This ensures real-time accuracy for the active user
+            if let currentUser = authService.currentUser {
+                // Fetch portfolio ID if we don't have it
+                if portfolioId == nil {
+                    if let portfolio = try? await dataService.fetchPortfolio(userId: currentUser.id) {
+                        portfolioId = portfolio.id
+                    }
+                }
+
+                // Update net worth in database
+                if let portfolioId = portfolioId {
+                    try? await dataService.updatePortfolioNetWorth(
+                        portfolioId: portfolioId,
+                        netWorth: currentUserNetWorth,
+                        gainPercentage: currentUserGain
+                    )
+                }
+            }
+
             // Fetch leaderboard from backend
             var entries = try await dataService.fetchLeaderboard(limit: 50)
 

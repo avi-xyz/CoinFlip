@@ -95,6 +95,11 @@ class MockDataService: DataServiceProtocol {
         return newPortfolio
     }
 
+    func updatePortfolioNetWorth(portfolioId: UUID, netWorth: Double, gainPercentage: Double) async throws {
+        // Mock implementation - no-op since we don't persist net worth in mock mode
+        print("MockDataService: Updated portfolio \(portfolioId) net worth: $\(netWorth) (\(gainPercentage)%)")
+    }
+
     // MARK: - Holdings Operations
 
     func fetchHoldings(portfolioId: UUID) async throws -> [Holding] {
