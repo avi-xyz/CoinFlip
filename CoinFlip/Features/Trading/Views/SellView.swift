@@ -222,6 +222,9 @@ struct SellView: View {
                                 Text("Sale Summary")
                                     .font(.headline3)
                                     .foregroundColor(.textPrimary)
+
+                                InfoTooltip(text: "This shows the breakdown of your sale including what you'll receive, what you originally paid (cost basis), and your profit or loss.")
+
                                 Spacer()
                             }
 
@@ -229,9 +232,13 @@ struct SellView: View {
                                 .background(Color.borderPrimary)
 
                             HStack {
-                                Text("Sale value")
-                                    .font(.bodyMedium)
-                                    .foregroundColor(.textSecondary)
+                                HStack(spacing: Spacing.xxs) {
+                                    Text("Sale value")
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.textSecondary)
+
+                                    InfoTooltip(text: "The total cash you'll receive from selling these coins at the current market price. This amount will be added to your cash balance.")
+                                }
                                 Spacer()
                                 if isPriceUnavailable {
                                     Text("Price Unavailable")
@@ -245,9 +252,13 @@ struct SellView: View {
                             }
 
                             HStack {
-                                Text("Cost basis")
-                                    .font(.bodySmall)
-                                    .foregroundColor(.textSecondary)
+                                HStack(spacing: Spacing.xxs) {
+                                    Text("Cost basis")
+                                        .font(.bodySmall)
+                                        .foregroundColor(.textSecondary)
+
+                                    InfoTooltip(text: "Cost basis is the original amount you paid for these coins. It's calculated from your average purchase price. The difference between sale value and cost basis is your profit or loss.")
+                                }
                                 Spacer()
                                 Text(Formatters.currency(costBasis))
                                     .font(.bodySmall)

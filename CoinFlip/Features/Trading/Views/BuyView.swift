@@ -92,6 +92,9 @@ struct BuyView: View {
                                 Text("Order Summary")
                                     .font(.headline3)
                                     .foregroundColor(.textPrimary)
+
+                                InfoTooltip(text: "This shows the details of your purchase. Review the quantity of coins you'll receive and the total cost before confirming.")
+
                                 Spacer()
                             }
 
@@ -99,9 +102,13 @@ struct BuyView: View {
                                 .background(Color.borderPrimary)
 
                             HStack {
-                                Text("You're buying")
-                                    .font(.bodyMedium)
-                                    .foregroundColor(.textSecondary)
+                                HStack(spacing: Spacing.xxs) {
+                                    Text("You're buying")
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.textSecondary)
+
+                                    InfoTooltip(text: "The number of coins you'll receive. This is calculated by dividing your purchase amount by the current coin price.")
+                                }
                                 Spacer()
                                 Text("\(Formatters.quantity(coinQuantity)) \(coin.symbol.uppercased())")
                                     .font(.bodyMedium)
@@ -109,9 +116,13 @@ struct BuyView: View {
                             }
 
                             HStack {
-                                Text("Total cost")
-                                    .font(.bodyMedium)
-                                    .foregroundColor(.textSecondary)
+                                HStack(spacing: Spacing.xxs) {
+                                    Text("Total cost")
+                                        .font(.bodyMedium)
+                                        .foregroundColor(.textSecondary)
+
+                                    InfoTooltip(text: "The total amount that will be deducted from your cash balance. This is your purchase price or 'cost basis' for calculating future profit/loss.")
+                                }
                                 Spacer()
                                 Text(Formatters.currency(amount))
                                     .font(.numberMedium)

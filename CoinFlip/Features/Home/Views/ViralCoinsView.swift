@@ -91,28 +91,30 @@ struct ViralCoinsView: View {
 private struct WarningBanner: View {
     var body: some View {
         HStack(spacing: Spacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-                .font(.headline3)
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.blue)
+                .font(.title2)
 
             VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text("Educational Only - Extreme Risk")
+                Text("Learn About Viral Coins")
                     .font(.labelMedium)
                     .foregroundColor(.textPrimary)
+                    .fontWeight(.semibold)
 
-                Text("These are ultra-volatile coins from the last hour. Trade with caution!")
+                Text("Newly launched coins with high volatility. Prices can change 50%+ in minutes! Perfect for learning about extreme market dynamics in a risk-free environment.")
                     .font(.labelSmall)
                     .foregroundColor(.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
         }
         .padding(Spacing.md)
-        .background(Color.orange.opacity(0.1))
+        .background(Color.blue.opacity(0.1))
         .cornerRadius(Spacing.sm)
         .overlay(
             RoundedRectangle(cornerRadius: Spacing.sm)
-                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
         )
     }
 }

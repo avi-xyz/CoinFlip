@@ -5,8 +5,9 @@ struct ProfileView: View {
     @EnvironmentObject var themeService: ThemeService
     @State private var showAvatarPicker = false
     @State private var showUsernameEditor = false
-    @State private var showNotificationSettings = false
     @State private var showResetConfirmation = false
+    @State private var showLearnSection = false
+    @State private var showThemePicker = false
     @State private var previousAvatar: String = ""
 
     var body: some View {
@@ -30,6 +31,24 @@ struct ProfileView: View {
                         }
                     )
 
+                    // Learning
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        Text("Learning")
+                            .font(.headline3)
+                            .foregroundColor(.textPrimary)
+                            .padding(.horizontal, Spacing.xs)
+
+                        SettingsRow(
+                            icon: "book.fill",
+                            title: "Learn About Crypto",
+                            subtitle: "Basics, trading, and strategies",
+                            iconColor: .primaryGreen
+                        ) {
+                            showLearnSection = true
+                            HapticManager.shared.impact(.light)
+                        }
+                    }
+
                     // App Settings
                     VStack(alignment: .leading, spacing: Spacing.sm) {
                         Text("App Settings")
@@ -38,13 +57,15 @@ struct ProfileView: View {
                             .padding(.horizontal, Spacing.xs)
 
                         SettingsRow(
-                            icon: "bell.fill",
-                            title: "Notifications",
+                            icon: themeService.currentTheme.icon,
+                            title: "Theme",
+                            value: themeService.currentTheme.rawValue,
                             iconColor: .primaryGreen
                         ) {
-                            showNotificationSettings = true
+                            showThemePicker = true
                             HapticManager.shared.impact(.light)
                         }
+
                     }
 
                     // About
@@ -70,7 +91,6 @@ struct ProfileView: View {
                             title: "Terms of Service",
                             iconColor: .textSecondary
                         ) {
-                            // TODO: Update this URL after hosting the policy documents
                             if let url = URL(string: "https://avi-xyz.github.io/CoinFlip/terms-of-service.html") {
                                 UIApplication.shared.open(url)
                             }
@@ -82,7 +102,6 @@ struct ProfileView: View {
                             title: "Privacy Policy",
                             iconColor: .textSecondary
                         ) {
-                            // TODO: Update this URL after hosting the policy documents
                             if let url = URL(string: "https://avi-xyz.github.io/CoinFlip/privacy-policy.html") {
                                 UIApplication.shared.open(url)
                             }
@@ -131,17 +150,6 @@ struct ProfileView: View {
             }
             .background(Color.appBackground)
             .navigationTitle("Profile")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        toggleTheme()
-                    }) {
-                        Image(systemName: themeService.currentTheme == .dark ? "moon.fill" : "sun.max.fill")
-                            .foregroundColor(.primaryGreen)
-                            .font(.title3)
-                    }
-                }
-            }
             .sheet(isPresented: $showAvatarPicker) {
                 AvatarPicker(selectedEmoji: $viewModel.avatarEmoji)
                     .onDisappear {
@@ -157,8 +165,11 @@ struct ProfileView: View {
             .sheet(isPresented: $showUsernameEditor) {
                 EditUsernameView(viewModel: viewModel)
             }
-            .sheet(isPresented: $showNotificationSettings) {
-                NotificationSettingsView()
+            .sheet(isPresented: $showLearnSection) {
+                LearnView()
+            }
+            .sheet(isPresented: $showThemePicker) {
+                ThemeSettingsView()
             }
             .alert("Reset Portfolio?", isPresented: $showResetConfirmation) {
                 Button("Cancel", role: .cancel) { }
@@ -174,12 +185,6 @@ struct ProfileView: View {
                 viewModel.loadUserData()
             }
         }
-    }
-
-    private func toggleTheme() {
-        // Toggle between dark and system
-        let newTheme: Theme = themeService.currentTheme == .dark ? .system : .dark
-        themeService.setTheme(newTheme)
     }
 }
 

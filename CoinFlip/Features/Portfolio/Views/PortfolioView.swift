@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PortfolioView: View {
     @EnvironmentObject var viewModel: PortfolioViewModel
+    @State private var showTransactionHistory = false
 
     var body: some View {
         NavigationStack {
@@ -10,9 +11,13 @@ struct PortfolioView: View {
                     // Portfolio Summary
                     BaseCard {
                         VStack(spacing: Spacing.md) {
-                            Text("Net Worth")
-                                .font(.bodyMedium)
-                                .foregroundColor(.textSecondary)
+                            HStack(spacing: Spacing.xxs) {
+                                Text("Net Worth")
+                                    .font(.bodyMedium)
+                                    .foregroundColor(.textSecondary)
+
+                                InfoTooltip(text: "Your total net worth is your cash balance plus the current value of all your coin holdings. This is the most important metric to track your overall performance.")
+                            }
 
                             Text(Formatters.currency(viewModel.portfolio.cashBalance + viewModel.totalHoldingsValue, decimals: 2))
                                 .font(.displayMedium)
@@ -39,9 +44,13 @@ struct PortfolioView: View {
                             // Breakdown
                             HStack {
                                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                                    Text("Cash")
-                                        .font(.labelMedium)
-                                        .foregroundColor(.textSecondary)
+                                    HStack(spacing: Spacing.xxs) {
+                                        Text("Cash")
+                                            .font(.labelMedium)
+                                            .foregroundColor(.textSecondary)
+
+                                        InfoTooltip(text: "Your available cash balance. This is the amount you can use to buy more coins.")
+                                    }
                                     Text(Formatters.currency(viewModel.portfolio.cashBalance))
                                         .font(.bodyMedium)
                                         .foregroundColor(.textPrimary)
@@ -52,9 +61,13 @@ struct PortfolioView: View {
                                 Spacer()
 
                                 VStack(alignment: .trailing, spacing: Spacing.xxs) {
-                                    Text("Holdings")
-                                        .font(.labelMedium)
-                                        .foregroundColor(.textSecondary)
+                                    HStack(spacing: Spacing.xxs) {
+                                        Text("Holdings")
+                                            .font(.labelMedium)
+                                            .foregroundColor(.textSecondary)
+
+                                        InfoTooltip(text: "The current market value of all the coins you own. This value changes as coin prices fluctuate.")
+                                    }
                                     Text(Formatters.currency(viewModel.totalHoldingsValue))
                                         .font(.bodyMedium)
                                         .foregroundColor(.textPrimary)
@@ -131,11 +144,24 @@ struct PortfolioView: View {
                         // Transaction History
                         if !viewModel.transactions.isEmpty {
                             VStack(alignment: .leading, spacing: Spacing.sm) {
-                                Text("Recent Transactions")
-                                    .font(.headline3)
-                                    .foregroundColor(.textPrimary)
-                                    .padding(.horizontal, Spacing.xs)
-                                    .padding(.top, Spacing.md)
+                                HStack {
+                                    Text("Recent Transactions")
+                                        .font(.headline3)
+                                        .foregroundColor(.textPrimary)
+
+                                    Spacer()
+
+                                    Button {
+                                        showTransactionHistory = true
+                                        HapticManager.shared.impact(.light)
+                                    } label: {
+                                        Text("See All")
+                                            .font(.labelMedium)
+                                            .foregroundColor(.primaryGreen)
+                                    }
+                                }
+                                .padding(.horizontal, Spacing.xs)
+                                .padding(.top, Spacing.md)
 
                                 ForEach(viewModel.transactions.prefix(10)) { transaction in
                                     TransactionRow(transaction: transaction)
@@ -184,6 +210,9 @@ struct PortfolioView: View {
                     // Refresh price when opening sell sheet (5-minute cache)
                     await viewModel.refreshPrice(for: holding.coinId)
                 }
+            }
+            .sheet(isPresented: $showTransactionHistory) {
+                TransactionHistoryView(transactions: viewModel.transactions)
             }
             .onAppear {
                 viewModel.loadData()

@@ -66,6 +66,7 @@ struct ThemeSettingsView: View {
                 }
             }
         }
+        .preferredColorScheme(themeService.currentTheme.colorScheme)
     }
 }
 

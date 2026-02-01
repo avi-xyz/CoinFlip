@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingView: View {
     @StateObject private var viewModel = OnboardingViewModel()
     @Binding var showOnboarding: Bool
+    @State private var showSkipConfirmation = false
 
     var body: some View {
         ZStack {
@@ -13,11 +14,18 @@ struct OnboardingView: View {
                 HStack {
                     Spacer()
                     if viewModel.currentPage < viewModel.pages.count - 1 {
-                        Button("Skip") {
-                            completeOnboarding()
+                        Button {
+                            showSkipConfirmation = true
+                            HapticManager.shared.impact(.light)
+                        } label: {
+                            Text("Skip")
+                                .font(.bodyMedium)
+                                .foregroundColor(.textSecondary)
+                                .padding(.horizontal, Spacing.md)
+                                .padding(.vertical, Spacing.sm)
+                                .background(Color.cardBackground)
+                                .cornerRadius(Spacing.xs)
                         }
-                        .font(.bodyMedium)
-                        .foregroundColor(.textSecondary)
                         .padding()
                     }
                 }
@@ -62,6 +70,14 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, Spacing.xl)
             }
+        }
+        .alert("Skip Introduction?", isPresented: $showSkipConfirmation) {
+            Button("Go Back", role: .cancel) { }
+            Button("Skip") {
+                completeOnboarding()
+            }
+        } message: {
+            Text("You can always access the Learn section in your Profile to understand crypto trading basics.")
         }
     }
 

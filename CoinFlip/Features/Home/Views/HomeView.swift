@@ -15,6 +15,11 @@ struct HomeView: View {
                     )
                     .padding(.top, Spacing.md)
 
+                    // First Trade Guidance Banner
+                    if viewModel.portfolio.cashBalance >= 999.0 {
+                        FirstTradeGuidanceBanner()
+                    }
+
                     if viewModel.isLoading {
                         LoadingSkeletonView()
                     } else {
@@ -64,6 +69,54 @@ struct HomeView: View {
                     await viewModel.loadData()
                 }
             }
+        }
+    }
+}
+
+// MARK: - First Trade Guidance Banner
+
+private struct FirstTradeGuidanceBanner: View {
+    @State private var isDismissed = false
+
+    var body: some View {
+        if !isDismissed {
+            BaseCard {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "hand.wave.fill")
+                        .foregroundColor(.primaryGreen)
+                        .font(.title)
+
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text("Ready to Start Trading?")
+                            .font(.labelMedium)
+                            .foregroundColor(.textPrimary)
+                            .fontWeight(.semibold)
+
+                        Text("You have $1,000 to practice with! Tap any coin below to make your first purchase. Start small to learn how trading works.")
+                            .font(.labelSmall)
+                            .foregroundColor(.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        withAnimation {
+                            isDismissed = true
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.textMuted)
+                            .font(.title3)
+                    }
+                }
+                .padding(.vertical, Spacing.xs)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: Spacing.cardRadius)
+                    .stroke(Color.primaryGreen.opacity(0.3), lineWidth: 1)
+            )
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 }

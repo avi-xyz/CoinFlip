@@ -46,6 +46,7 @@ struct ContentView: View {
                     }
             }
         }
+        .preferredColorScheme(themeService.currentTheme.colorScheme)
     }
 
     private var mainAppView: some View {
@@ -82,7 +83,6 @@ struct ContentView: View {
                         Label("Profile", systemImage: "person.fill")
                     }
             }
-            .preferredColorScheme(themeService.currentTheme.colorScheme)
             .accentColor(.primaryGreen)
             .environmentObject(networkMonitor)
             .onAppear {
@@ -104,6 +104,7 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingView(showOnboarding: $showOnboarding)
+                .preferredColorScheme(themeService.currentTheme.colorScheme)
                 .onDisappear {
                     hasCompletedOnboarding = true
                 }
