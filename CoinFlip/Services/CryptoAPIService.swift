@@ -33,6 +33,52 @@ class CryptoAPIService {
     private var priceCache: [String: (price: Double, timestamp: Date)] = [:]
     private let priceCacheDuration: TimeInterval = 300 // 5 minutes
 
+    // MARK: - DEBUG: API Call Counter
+    /// Set to true to enable API call logging for debugging rate limits
+    static var enableAPICallLogging = false
+
+    private var apiCallCount: Int = 0
+    private var sessionStartTime: Date = Date()
+
+    private func incrementCallCount(endpoint: String) {
+        apiCallCount += 1
+        guard Self.enableAPICallLogging else { return }
+        let elapsed = Int(Date().timeIntervalSince(sessionStartTime))
+        print("📈 [CoinGecko] API call #\(apiCallCount) (session: \(elapsed)s) - \(endpoint)")
+    }
+
+    private func logRateLimitHit(endpoint: String) {
+        let elapsed = Int(Date().timeIntervalSince(sessionStartTime))
+        // Always log rate limit hits, even if logging is disabled
+        print("🚨🚨🚨 [CoinGecko] RATE LIMIT HIT 🚨🚨🚨")
+        print("   📊 Total API calls this session: \(apiCallCount)")
+        print("   ⏱️  Session duration: \(elapsed) seconds")
+        print("   📍 Endpoint: \(endpoint)")
+        print("   📉 Calls per minute: \(elapsed > 0 ? Double(apiCallCount) / Double(elapsed) * 60 : 0)")
+
+        // Log to Supabase for production monitoring
+        Task {
+            await APIRateLimitLogger.shared.logRateLimitEvent(
+                apiName: "CoinGecko",
+                endpoint: endpoint,
+                callCount: apiCallCount,
+                sessionDuration: elapsed
+            )
+        }
+    }
+
+    /// Log current stats (called by GeckoTerminalService when it hits rate limit)
+    func logCurrentStats() {
+        let elapsed = Int(Date().timeIntervalSince(sessionStartTime))
+        // Always log when called (rate limit hit)
+        print("📊 [CoinGecko] Current stats: \(apiCallCount) calls in \(elapsed)s")
+    }
+
+    /// Track external calls made to CoinGecko from other services (e.g., image search)
+    func trackExternalCall(endpoint: String) {
+        incrementCallCount(endpoint: endpoint)
+    }
+
     // MARK: - Initialization
 
     private init() {
@@ -92,6 +138,7 @@ class CryptoAPIService {
         }
 
         print("   🌐 Fetching from: \(url)")
+        incrementCallCount(endpoint: "coins/markets")
 
         // Make request
         let (data, response) = try await session.data(from: url)
@@ -104,6 +151,7 @@ class CryptoAPIService {
 
         guard httpResponse.statusCode == 200 else {
             if httpResponse.statusCode == 429 {
+                logRateLimitHit(endpoint: "coins/markets")
                 throw CryptoAPIError.rateLimitExceeded
             }
             throw CryptoAPIError.httpError(httpResponse.statusCode)
@@ -187,9 +235,19 @@ class CryptoAPIService {
             throw CryptoAPIError.invalidURL
         }
 
+        incrementCallCount(endpoint: "simple/price")
         let (data, response) = try await session.data(from: url)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CryptoAPIError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 429 {
+            logRateLimitHit(endpoint: "simple/price")
+            throw CryptoAPIError.rateLimitExceeded
+        }
+
+        guard httpResponse.statusCode == 200 else {
             throw CryptoAPIError.invalidResponse
         }
 
@@ -263,6 +321,7 @@ class CryptoAPIService {
             throw CryptoAPIError.invalidURL
         }
 
+        incrementCallCount(endpoint: "simple/price (batch)")
         let (data, response) = try await session.data(from: url)
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -271,6 +330,7 @@ class CryptoAPIService {
 
         guard httpResponse.statusCode == 200 else {
             if httpResponse.statusCode == 429 {
+                logRateLimitHit(endpoint: "simple/price (batch)")
                 throw CryptoAPIError.rateLimitExceeded
             }
             throw CryptoAPIError.httpError(httpResponse.statusCode)

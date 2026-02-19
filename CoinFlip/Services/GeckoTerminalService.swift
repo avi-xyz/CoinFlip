@@ -25,10 +25,51 @@ class GeckoTerminalService {
     private let baseURL = "https://api.geckoterminal.com/api/v2"
     private let session: URLSession
 
-    // Cache
+    // Cache for viral coins
     private var cachedViralCoins: [Coin] = []
     private var lastFetchTime: Date?
     private let cacheValidDuration: TimeInterval = 30 // 30 seconds (matches API update frequency)
+
+    // Cache for OHLCV data
+    private var ohlcvCache: [String: (data: [Double], timestamp: Date)] = [:]
+    private let ohlcvCacheValidDuration: TimeInterval = 300 // 5 minutes for historical data
+
+    // MARK: - DEBUG: API Call Counter
+    /// Set to true to enable API call logging for debugging rate limits
+    static var enableAPICallLogging = false
+
+    private var apiCallCount: Int = 0
+    private var sessionStartTime: Date = Date()
+
+    private func incrementCallCount(endpoint: String) {
+        apiCallCount += 1
+        guard Self.enableAPICallLogging else { return }
+        let elapsed = Int(Date().timeIntervalSince(sessionStartTime))
+        print("📈 [GeckoTerminal] API call #\(apiCallCount) (session: \(elapsed)s) - \(endpoint)")
+    }
+
+    private func logRateLimitHit(endpoint: String) {
+        let elapsed = Int(Date().timeIntervalSince(sessionStartTime))
+        // Always log rate limit hits, even if logging is disabled
+        print("🚨🚨🚨 [GeckoTerminal] RATE LIMIT HIT 🚨🚨🚨")
+        print("   📊 Total API calls this session: \(apiCallCount)")
+        print("   ⏱️  Session duration: \(elapsed) seconds")
+        print("   📍 Endpoint: \(endpoint)")
+        print("   📉 Calls per minute: \(elapsed > 0 ? Double(apiCallCount) / Double(elapsed) * 60 : 0)")
+
+        // Also log CoinGecko stats for comparison
+        CryptoAPIService.shared.logCurrentStats()
+
+        // Log to Supabase for production monitoring
+        Task {
+            await APIRateLimitLogger.shared.logRateLimitEvent(
+                apiName: "GeckoTerminal",
+                endpoint: endpoint,
+                callCount: apiCallCount,
+                sessionDuration: elapsed
+            )
+        }
+    }
 
     // MARK: - Initialization
 
@@ -79,6 +120,7 @@ class GeckoTerminalService {
         }
 
         print("   🌐 Fetching from: \(url)")
+        incrementCallCount(endpoint: "trending_pools")
 
         // Make request
         let (data, response) = try await session.data(from: url)
@@ -91,6 +133,7 @@ class GeckoTerminalService {
 
         guard httpResponse.statusCode == 200 else {
             if httpResponse.statusCode == 429 {
+                logRateLimitHit(endpoint: "trending_pools")
                 throw GeckoTerminalError.rateLimitExceeded
             }
             throw GeckoTerminalError.httpError(httpResponse.statusCode)
@@ -174,6 +217,9 @@ class GeckoTerminalService {
         let searchURL = "https://api.coingecko.com/api/v3/search?query=\(symbol)"
 
         guard let url = URL(string: searchURL) else { return nil }
+
+        // Note: This is a CoinGecko call, not GeckoTerminal
+        CryptoAPIService.shared.trackExternalCall(endpoint: "search (image)")
 
         do {
             let (data, _) = try await session.data(from: url)
@@ -296,6 +342,7 @@ class GeckoTerminalService {
         }
 
         print("   🌐 Fetching from: \(url)")
+        incrementCallCount(endpoint: "token_price")
 
         // Make request
         let (data, response) = try await session.data(from: url)
@@ -308,6 +355,7 @@ class GeckoTerminalService {
 
         guard httpResponse.statusCode == 200 else {
             if httpResponse.statusCode == 429 {
+                logRateLimitHit(endpoint: "token_price")
                 throw GeckoTerminalError.rateLimitExceeded
             }
             if httpResponse.statusCode == 404 {
@@ -350,6 +398,128 @@ class GeckoTerminalService {
         cachedViralCoins = []
         lastFetchTime = nil
         print("🗑️ GeckoTerminalService: Cache cleared")
+    }
+
+    /// Fetch OHLCV (candlestick) data for a specific pool
+    ///
+    /// - Parameters:
+    ///   - network: Network identifier (e.g., "solana", "eth", "base")
+    ///   - poolAddress: Pool contract address
+    ///   - timeframe: Candle timeframe - "minute", "hour", or "day" (default: "hour")
+    ///   - limit: Number of candles to fetch (default: 48)
+    /// - Returns: Array of closing prices for sparkline display
+    func fetchPoolOHLCV(network: String, poolAddress: String, timeframe: String = "hour", limit: Int = 48) async throws -> [Double] {
+        let cacheKey = "\(network)_\(poolAddress)_\(timeframe)"
+        print("📊 GeckoTerminalService: Fetching OHLCV for pool \(poolAddress) on \(network)...")
+
+        // Check cache first
+        if let cached = ohlcvCache[cacheKey] {
+            let age = Date().timeIntervalSince(cached.timestamp)
+            if age < ohlcvCacheValidDuration {
+                print("   ✅ Returning cached OHLCV data (age: \(Int(age))s)")
+                return cached.data
+            }
+        }
+
+        // Check if offline
+        if !NetworkMonitor.shared.isConnected {
+            // Return cached data if available, even if stale
+            if let cached = ohlcvCache[cacheKey] {
+                print("   📵 Offline - returning stale cached OHLCV data")
+                return cached.data
+            }
+            print("   ❌ Offline - cannot fetch OHLCV data")
+            throw GeckoTerminalError.networkError(NSError(domain: "NetworkMonitor", code: -1009, userInfo: [
+                NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."
+            ]))
+        }
+
+        // Retry with exponential backoff for rate limits
+        var lastError: Error?
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                let delay = pow(2.0, Double(attempt)) // 2s, 4s
+                print("   ⏳ Rate limited, waiting \(Int(delay))s before retry...")
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+
+            do {
+                let prices = try await performOHLCVFetch(network: network, poolAddress: poolAddress, timeframe: timeframe, limit: limit)
+
+                // Cache the result
+                ohlcvCache[cacheKey] = (data: prices, timestamp: Date())
+
+                return prices
+            } catch GeckoTerminalError.rateLimitExceeded {
+                lastError = GeckoTerminalError.rateLimitExceeded
+                print("   ⚠️ Rate limit hit (attempt \(attempt + 1)/3)")
+                continue
+            } catch {
+                throw error
+            }
+        }
+
+        // If all retries failed, return cached data if available
+        if let cached = ohlcvCache[cacheKey] {
+            print("   ⚠️ All retries failed, returning stale cached data")
+            return cached.data
+        }
+
+        throw lastError ?? GeckoTerminalError.rateLimitExceeded
+    }
+
+    /// Internal method to perform the actual OHLCV API call
+    private func performOHLCVFetch(network: String, poolAddress: String, timeframe: String, limit: Int) async throws -> [Double] {
+        // Build URL for OHLCV endpoint
+        let endpoint = "\(baseURL)/networks/\(network)/pools/\(poolAddress)/ohlcv/\(timeframe)?aggregate=1&limit=\(limit)"
+        guard let url = URL(string: endpoint) else {
+            throw GeckoTerminalError.invalidURL
+        }
+
+        print("   🌐 Fetching from: \(url)")
+        incrementCallCount(endpoint: "ohlcv")
+
+        // Make request
+        let (data, response) = try await session.data(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GeckoTerminalError.invalidResponse
+        }
+
+        print("   📥 Response: HTTP \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 200 else {
+            if httpResponse.statusCode == 429 {
+                logRateLimitHit(endpoint: "ohlcv")
+                throw GeckoTerminalError.rateLimitExceeded
+            }
+            if httpResponse.statusCode == 404 {
+                throw GeckoTerminalError.poolNotFound
+            }
+            throw GeckoTerminalError.httpError(httpResponse.statusCode)
+        }
+
+        // Parse response
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let ohlcvResponse: GeckoTerminalOHLCVResponse
+        do {
+            ohlcvResponse = try decoder.decode(GeckoTerminalOHLCVResponse.self, from: data)
+        } catch {
+            print("   ❌ Decoding error: \(error)")
+            throw error
+        }
+
+        // Extract closing prices from OHLCV data
+        // OHLCV array format: [timestamp, open, high, low, close, volume]
+        let closingPrices = ohlcvResponse.data.attributes.ohlcvList.compactMap { candle -> Double? in
+            guard candle.count >= 5 else { return nil }
+            return candle[4] // Index 4 is close price
+        }
+
+        print("   ✅ Fetched \(closingPrices.count) price points")
+        return closingPrices
     }
 }
 
@@ -441,7 +611,7 @@ private struct GeckoTerminalPool: Codable {
         let chainId = id.split(separator: "_").first.map { String($0) }
 
         return Coin(
-            id: attributes.address.lowercased(),
+            id: attributes.address,
             symbol: symbol,
             name: tokenName,
             image: nil, // Will be enriched later from CoinGecko
@@ -479,6 +649,23 @@ private struct GeckoTerminalTokenData: Codable {
         let name: String
         let symbol: String
         let priceUsd: String?
+    }
+}
+
+// MARK: - GeckoTerminal OHLCV Response Models
+
+/// Response from GeckoTerminal /networks/{network}/pools/{address}/ohlcv/{timeframe} endpoint
+private struct GeckoTerminalOHLCVResponse: Codable {
+    let data: GeckoTerminalOHLCVData
+}
+
+private struct GeckoTerminalOHLCVData: Codable {
+    let id: String
+    let type: String
+    let attributes: OHLCVAttributes
+
+    struct OHLCVAttributes: Codable {
+        let ohlcvList: [[Double]]
     }
 }
 

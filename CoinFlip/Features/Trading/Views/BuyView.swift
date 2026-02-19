@@ -10,6 +10,9 @@ struct BuyView: View {
     @State private var showConfirmation = false
     @State private var purchaseSuccess = false
     @State private var showConfetti = false
+    @State private var ohlcvData: [Double]? = nil
+    @State private var isLoadingChart = false
+    @State private var chartError: String? = nil
 
     private var coinQuantity: Double {
         guard coin.currentPrice > 0 else { return 0 }
@@ -60,6 +63,14 @@ struct BuyView: View {
                         }
                     }
                     .padding(.top, Spacing.md)
+
+                    // Price Chart
+                    PriceChartCard(
+                        coin: coin,
+                        ohlcvData: ohlcvData,
+                        isLoading: isLoadingChart,
+                        error: chartError
+                    )
 
                     // Available Cash
                     BaseCard {
@@ -219,6 +230,9 @@ struct BuyView: View {
         .onAppear {
             amount = initialAmount
         }
+        .task {
+            await loadChartData()
+        }
     }
 
     private func executePurchase() {
@@ -234,6 +248,138 @@ struct BuyView: View {
 
         withAnimation {
             showConfirmation = true
+        }
+    }
+
+    private func loadChartData() async {
+        // For regular coins, sparkline data is already available
+        if coin.sparklineIn7d != nil {
+            return
+        }
+
+        // For viral coins, fetch OHLCV data
+        guard coin.isViral, let chainId = coin.chainId else {
+            return
+        }
+
+        isLoadingChart = true
+        chartError = nil
+
+        // Small delay to avoid rate limiting if viral coins were just loaded
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second
+
+        do {
+            let prices = try await GeckoTerminalService.shared.fetchPoolOHLCV(
+                network: chainId,
+                poolAddress: coin.id,
+                timeframe: "hour",
+                limit: 48
+            )
+            ohlcvData = prices
+        } catch {
+            print("❌ Failed to fetch OHLCV: \(error)")
+            chartError = "Unable to load price history"
+        }
+
+        isLoadingChart = false
+    }
+}
+
+// MARK: - Price Chart Card
+
+private struct PriceChartCard: View {
+    let coin: Coin
+    let ohlcvData: [Double]?
+    let isLoading: Bool
+    let error: String?
+
+    private var chartData: [Double]? {
+        // Use sparkline data for regular coins
+        if let sparkline = coin.sparklineIn7d?.price {
+            return sparkline
+        }
+        // Use OHLCV data for viral coins
+        return ohlcvData
+    }
+
+    private var timeLabel: String {
+        if coin.sparklineIn7d != nil {
+            return "7 days"
+        } else if coin.isViral {
+            return "48 hours"
+        }
+        return ""
+    }
+
+    var body: some View {
+        BaseCard {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack {
+                    Text("Price Trend")
+                        .font(.headline3)
+                        .foregroundColor(.textPrimary)
+
+                    Spacer()
+
+                    if !timeLabel.isEmpty {
+                        Text(timeLabel)
+                            .font(.labelSmall)
+                            .foregroundColor(.textMuted)
+                    }
+                }
+
+                if isLoading {
+                    // Loading state
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .primaryGreen))
+                        Spacer()
+                    }
+                    .frame(height: 100)
+                } else if let error = error {
+                    // Error state
+                    VStack(spacing: Spacing.sm) {
+                        Image(systemName: "chart.line.downtrend.xyaxis")
+                            .font(.title)
+                            .foregroundColor(.textMuted)
+                        Text(error)
+                            .font(.bodySmall)
+                            .foregroundColor(.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 100)
+                } else if let data = chartData, data.count > 1 {
+                    // Chart
+                    SparklineView(data: data, lineWidth: 2.5)
+                        .frame(height: 100)
+
+                    // Price range
+                    if let minPrice = data.min(), let maxPrice = data.max() {
+                        HStack {
+                            Text("L: \(Formatters.cryptoPrice(minPrice))")
+                                .font(.labelSmall)
+                                .foregroundColor(.textMuted)
+                            Spacer()
+                            Text("H: \(Formatters.cryptoPrice(maxPrice))")
+                                .font(.labelSmall)
+                                .foregroundColor(.textMuted)
+                        }
+                    }
+                } else {
+                    // No data available
+                    VStack(spacing: Spacing.sm) {
+                        Image(systemName: "chart.line.flattrend.xyaxis")
+                            .font(.title)
+                            .foregroundColor(.textMuted)
+                        Text("Price history not available")
+                            .font(.bodySmall)
+                            .foregroundColor(.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 100)
+                }
+            }
         }
     }
 }
