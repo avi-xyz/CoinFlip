@@ -244,19 +244,28 @@ class HomeViewModel: ObservableObject {
             }
         }
 
-        // Step 2b: For viral coins WITHOUT chainId, skip GeckoTerminal lookup
-        // (Don't try multiple chains - too many API calls)
-        // These will fall through to CoinGecko or use avgBuyPrice as fallback
+        // Step 2b: For viral coins WITHOUT chainId, use averageBuyPrice as fallback
+        // (Don't try CoinGecko - contract addresses aren't valid CoinGecko IDs)
+        let viralWithoutPrice = stillMissing.filter { $0.chainId != nil && currentPrices[$0.coinId] == nil }
+        for holding in viralWithoutPrice {
+            currentPrices[holding.coinId] = holding.averageBuyPrice
+            print("   💰 Using averageBuyPrice for viral coin \(holding.coinSymbol): $\(holding.averageBuyPrice)")
+        }
 
-        // Step 3: Fetch remaining coins from CoinGecko API
-        let stillMissing2 = missingHoldings.filter { currentPrices[$0.coinId] == nil }
+        // Step 3: Fetch remaining NON-VIRAL coins from CoinGecko API
+        // Filter out viral coins (those with chainId or contract address-like IDs)
+        let stillMissing2 = missingHoldings.filter { holding in
+            currentPrices[holding.coinId] == nil &&
+            holding.chainId == nil &&
+            !holding.coinId.hasPrefix("0x") // Skip contract addresses
+        }
 
         guard !stillMissing2.isEmpty else {
-            print("   ✅ All prices found (viral cache + GeckoTerminal)")
+            print("   ✅ All prices found (viral cache + GeckoTerminal + fallbacks)")
             return
         }
 
-        print("   🌐 Fetching \(stillMissing2.count) prices from CoinGecko API...")
+        print("   🌐 Fetching \(stillMissing2.count) standard coin prices from CoinGecko API...")
 
         do {
             let missingCoinIds = stillMissing2.map { $0.coinId }
