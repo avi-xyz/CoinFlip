@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoinDojo - Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; }
+        .card { background: #1e293b; border-radius: 12px; }
+        .stat-value { font-size: 2rem; font-weight: 700; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .status-ok { color: #22c55e; }
+        .status-warn { color: #eab308; }
+        .status-error { color: #ef4444; }
+        .login-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .login-box {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <!-- Simple Login Overlay -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+            <h2 class="text-2xl font-bold text-white mb-6">CoinDojo Monitoring</h2>
+            <input type="password" id="accessKey" placeholder="Enter access key"
+                   class="w-full p-3 rounded-lg bg-slate-700 text-white mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   onkeypress="if(event.key==='Enter')login()">
+            <button onclick="login()" class="w-full py-3 bg-blue-600 rounded-lg hover:bg-blue-700 transition font-semibold">
+                Access Dashboard
+            </button>
+            <p id="loginError" class="text-red-400 text-sm mt-3 hidden">Invalid access key</p>
+        </div>
+    </div>
+
+    <!-- Dashboard Content -->
+    <div id="dashboard" class="max-w-7xl mx-auto hidden">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">CoinDojo Monitoring</h1>
+                <p class="text-slate-400" id="lastUpdate">Loading...</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="status" class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-green-500 pulse"></span>
+                    <span class="text-green-500">Live</span>
+                </span>
+                <button onclick="refreshData()" class="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition">
+                    Refresh
+                </button>
+                <button onclick="logout()" class="px-4 py-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition">
+                    Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Overview Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">Total Users</p>
+                <p class="stat-value text-white" id="totalUsers">-</p>
+            </div>
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">Today's Sessions</p>
+                <p class="stat-value text-blue-400" id="todaySessions">-</p>
+            </div>
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">Active Now</p>
+                <p class="stat-value text-green-400" id="activeNow">-</p>
+            </div>
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">24h Events</p>
+                <p class="stat-value text-purple-400" id="totalEvents">-</p>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-4">Daily Active Users (7 days)</h2>
+                <canvas id="dauChart" height="200"></canvas>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-4">Event Distribution (24h)</h2>
+                <canvas id="eventsChart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="card p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Rate Limit Events</h2>
+                    <span id="rateLimitCount" class="px-3 py-1 rounded-full text-sm bg-yellow-900 text-yellow-300">-</span>
+                </div>
+                <div id="rateLimitList" class="space-y-2 max-h-64 overflow-y-auto">
+                    <p class="text-slate-500">Loading...</p>
+                </div>
+            </div>
+            <div class="card p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Recent Errors</h2>
+                    <span id="errorCount" class="px-3 py-1 rounded-full text-sm bg-red-900 text-red-300">-</span>
+                </div>
+                <div id="errorList" class="space-y-2 max-h-64 overflow-y-auto">
+                    <p class="text-slate-500">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trades Section -->
+        <div class="card p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Recent Trades (24h)</h2>
+                <span id="tradeCount" class="px-3 py-1 rounded-full text-sm bg-green-900 text-green-300">-</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-slate-400 text-sm border-b border-slate-700">
+                            <th class="pb-3">Time</th>
+                            <th class="pb-3">Type</th>
+                            <th class="pb-3">Coin</th>
+                            <th class="pb-3">Amount</th>
+                            <th class="pb-3">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTable">
+                        <tr><td colspan="5" class="text-slate-500 py-4">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Daily Metrics Table -->
+        <div class="card p-6">
+            <h2 class="text-xl font-semibold mb-4">Daily Metrics</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-slate-400 text-sm border-b border-slate-700">
+                            <th class="pb-3">Date</th>
+                            <th class="pb-3">DAU</th>
+                            <th class="pb-3">New Users</th>
+                            <th class="pb-3">Sessions</th>
+                            <th class="pb-3">Buys</th>
+                            <th class="pb-3">Sells</th>
+                            <th class="pb-3">Volume</th>
+                            <th class="pb-3">Errors</th>
+                            <th class="pb-3">Rate Limits</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metricsTable">
+                        <tr><td colspan="9" class="text-slate-500 py-4">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://qzlnlwwrnmvqdxnqdief.supabase.co/functions/v1/monitoring-dashboard/api';
+        let dauChart, eventsChart;
+        let accessKey = '';
+
+        // Check for saved session
+        window.onload = function() {
+            const savedKey = sessionStorage.getItem('dashboardKey');
+            if (savedKey) {
+                accessKey = savedKey;
+                showDashboard();
+            }
+        };
+
+        function login() {
+            const key = document.getElementById('accessKey').value;
+            // Hash check - this is just to prevent casual access
+            // Real security is in the Edge Function
+            if (key === 'coindojo2026') {
+                accessKey = key;
+                sessionStorage.setItem('dashboardKey', key);
+                showDashboard();
+            } else {
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('dashboardKey');
+            accessKey = '';
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            refreshData();
+        }
+
+        async function refreshData() {
+            try {
+                document.getElementById('status').innerHTML =
+                    '<span class="w-3 h-3 rounded-full bg-yellow-500 pulse"></span><span class="text-yellow-500">Loading...</span>';
+
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error('API error: ' + response.status);
+
+                const data = await response.json();
+                updateDashboard(data);
+
+                document.getElementById('status').innerHTML =
+                    '<span class="w-3 h-3 rounded-full bg-green-500 pulse"></span><span class="text-green-500">Live</span>';
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                document.getElementById('status').innerHTML =
+                    '<span class="w-3 h-3 rounded-full bg-red-500"></span><span class="text-red-500">Error</span>';
+                document.getElementById('lastUpdate').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function updateDashboard(data) {
+            document.getElementById('lastUpdate').textContent =
+                'Last updated: ' + new Date(data.timestamp).toLocaleString();
+
+            document.getElementById('totalUsers').textContent = data.overview.totalUsers.toLocaleString();
+            document.getElementById('todaySessions').textContent = data.overview.todaySessions.toLocaleString();
+            document.getElementById('activeNow').textContent = data.overview.activeNow.toLocaleString();
+            document.getElementById('totalEvents').textContent = data.overview.last24hEvents.toLocaleString();
+
+            document.getElementById('rateLimitCount').textContent = data.rateLimits.last24h + ' (24h)';
+            updateRateLimitList(data.rateLimits.recent);
+
+            document.getElementById('errorCount').textContent = data.errors.last24h + ' (24h)';
+            updateErrorList(data.errors.recent);
+
+            document.getElementById('tradeCount').textContent = data.trades.last24h + ' trades';
+            updateTradesTable(data.trades.recent);
+
+            updateMetricsTable(data.dailyMetrics);
+            updateCharts(data);
+        }
+
+        function updateRateLimitList(events) {
+            const list = document.getElementById('rateLimitList');
+            if (!events || events.length === 0) {
+                list.innerHTML = '<p class="text-green-400">No rate limit events in the last 24 hours</p>';
+                return;
+            }
+            list.innerHTML = events.map(e => `
+                <div class="flex justify-between items-center p-2 bg-slate-800 rounded">
+                    <div>
+                        <span class="text-yellow-400">${e.api_source || 'Unknown'}</span>
+                        <span class="text-slate-500 text-sm ml-2">${e.endpoint || ''}</span>
+                    </div>
+                    <span class="text-slate-400 text-sm">${new Date(e.timestamp).toLocaleTimeString()}</span>
+                </div>
+            `).join('');
+        }
+
+        function updateErrorList(errors) {
+            const list = document.getElementById('errorList');
+            if (!errors || errors.length === 0) {
+                list.innerHTML = '<p class="text-green-400">No errors in the last 24 hours</p>';
+                return;
+            }
+            list.innerHTML = errors.map(e => `
+                <div class="p-2 bg-slate-800 rounded">
+                    <div class="flex justify-between items-center">
+                        <span class="text-red-400">${e.event_name}</span>
+                        <span class="text-slate-400 text-sm">${new Date(e.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <p class="text-slate-500 text-sm mt-1">${e.properties?.message || ''}</p>
+                </div>
+            `).join('');
+        }
+
+        function updateTradesTable(trades) {
+            const table = document.getElementById('tradesTable');
+            if (!trades || trades.length === 0) {
+                table.innerHTML = '<tr><td colspan="5" class="text-slate-500 py-4">No trades in the last 24 hours</td></tr>';
+                return;
+            }
+            table.innerHTML = trades.map(t => `
+                <tr class="border-b border-slate-700">
+                    <td class="py-2 text-slate-400">${new Date(t.timestamp).toLocaleTimeString()}</td>
+                    <td class="py-2">
+                        <span class="${t.event_name.includes('buy') ? 'text-green-400' : 'text-red-400'}">
+                            ${t.event_name.includes('buy') ? 'BUY' : 'SELL'}
+                        </span>
+                    </td>
+                    <td class="py-2">${t.properties?.coin_symbol || '-'}</td>
+                    <td class="py-2">$${(t.properties?.amount || 0).toFixed(2)}</td>
+                    <td class="py-2">
+                        <span class="${t.event_name.includes('success') ? 'text-green-400' : 'text-red-400'}">
+                            ${t.event_name.includes('success') ? 'Success' : 'Failed'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateMetricsTable(metrics) {
+            const table = document.getElementById('metricsTable');
+            if (!metrics || metrics.length === 0) {
+                table.innerHTML = '<tr><td colspan="9" class="text-slate-500 py-4">No metrics data yet</td></tr>';
+                return;
+            }
+            table.innerHTML = metrics.map(m => `
+                <tr class="border-b border-slate-700">
+                    <td class="py-2">${m.date}</td>
+                    <td class="py-2 text-blue-400">${m.daily_active_users}</td>
+                    <td class="py-2 text-green-400">${m.new_users}</td>
+                    <td class="py-2">${m.total_sessions}</td>
+                    <td class="py-2 text-green-400">${m.total_buys}</td>
+                    <td class="py-2 text-red-400">${m.total_sells}</td>
+                    <td class="py-2">$${parseFloat(m.total_trade_volume || 0).toFixed(0)}</td>
+                    <td class="py-2 ${m.total_errors > 0 ? 'text-red-400' : ''}">${m.total_errors}</td>
+                    <td class="py-2 ${m.rate_limit_events > 0 ? 'text-yellow-400' : ''}">${m.rate_limit_events}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateCharts(data) {
+            const dauCtx = document.getElementById('dauChart').getContext('2d');
+            const dauData = (data.dailyMetrics || []).reverse();
+
+            if (dauChart) dauChart.destroy();
+            dauChart = new Chart(dauCtx, {
+                type: 'line',
+                data: {
+                    labels: dauData.map(d => d.date),
+                    datasets: [{
+                        label: 'Daily Active Users',
+                        data: dauData.map(d => d.daily_active_users),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                        x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+
+            const eventsCtx = document.getElementById('eventsChart').getContext('2d');
+            const eventTypes = Object.keys(data.eventCounts || {});
+            const eventValues = Object.values(data.eventCounts || {});
+
+            if (eventsChart) eventsChart.destroy();
+            eventsChart = new Chart(eventsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: eventTypes,
+                    datasets: [{
+                        data: eventValues,
+                        backgroundColor: [
+                            '#3b82f6', '#22c55e', '#eab308', '#ef4444',
+                            '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            if (accessKey) refreshData();
+        }, 30000);
+    </script>
+</body>
+</html>
