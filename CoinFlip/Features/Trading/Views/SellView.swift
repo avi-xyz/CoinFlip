@@ -4,15 +4,17 @@ struct SellView: View {
     let holding: Holding
     let coin: Coin
     let currentPrice: Double
-    let onSell: (Double) -> Bool
+    let onSell: (Double) async -> PortfolioViewModel.SellResult
 
     @Environment(\.dismiss) private var dismiss
     @State private var quantity: Double
     @State private var showConfirmation = false
     @State private var sellSuccess = false
     @State private var showConfetti = false
+    @State private var isSelling = false
+    @State private var errorMessage: String? = nil
 
-    init(holding: Holding, coin: Coin, currentPrice: Double, onSell: @escaping (Double) -> Bool) {
+    init(holding: Holding, coin: Coin, currentPrice: Double, onSell: @escaping (Double) async -> PortfolioViewModel.SellResult) {
         self.holding = holding
         self.coin = coin
         self.currentPrice = currentPrice
@@ -287,11 +289,13 @@ struct SellView: View {
                     }
 
                     // Sell Button
-                    PrimaryButton(title: "Confirm Sale") {
-                        executeSale()
+                    PrimaryButton(title: isSelling ? "Processing..." : "Confirm Sale") {
+                        Task {
+                            await executeSale()
+                        }
                     }
-                    .disabled(quantity <= 0 || isPriceUnavailable)
-                    .opacity(quantity <= 0 || isPriceUnavailable ? 0.5 : 1.0)
+                    .disabled(quantity <= 0 || isPriceUnavailable || isSelling)
+                    .opacity(quantity <= 0 || isPriceUnavailable || isSelling ? 0.5 : 1.0)
                     .accessibilityIdentifier("confirmSellButton")
 
                     if quantity <= 0 {
@@ -334,10 +338,11 @@ struct SellView: View {
                             .foregroundColor(.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("Something went wrong. Please try again.")
+                        Text(errorMessage ?? "Something went wrong. Please try again.")
                             .font(.bodyLarge)
                             .foregroundColor(.textSecondary)
                             .multilineTextAlignment(.center)
+                            .padding(.horizontal, Spacing.md)
                     }
 
                     PrimaryButton(title: "Done") {
@@ -373,16 +378,32 @@ struct SellView: View {
         }
     }
 
-    private func executeSale() {
+    private func executeSale() async {
         HapticManager.shared.impact(.medium)
-        sellSuccess = onSell(quantity)
+        isSelling = true
+        errorMessage = nil
 
-        if sellSuccess {
+        let result = await onSell(quantity)
+
+        switch result {
+        case .success:
+            sellSuccess = true
             showConfetti = true
             HapticManager.shared.success()
-        } else {
+
+        case .invalidQuantity:
+            sellSuccess = false
+            errorMessage = "Invalid quantity. Please adjust and try again."
+            HapticManager.shared.error()
+
+        case .persistenceFailed(let details):
+            sellSuccess = false
+            print("❌ Sale persistence failed: \(details)")
+            errorMessage = "Failed to save your sale. Please check your connection and try again."
             HapticManager.shared.error()
         }
+
+        isSelling = false
 
         withAnimation {
             showConfirmation = true
@@ -400,6 +421,6 @@ struct SellView: View {
         ),
         coin: MockData.coins[0],
         currentPrice: 0.0847,
-        onSell: { _ in true }
+        onSell: { _ in .success }
     )
 }

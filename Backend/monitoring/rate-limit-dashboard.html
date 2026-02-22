@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoinFlip - API Rate Limit Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #333;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        select, button {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        select:hover, button:hover {
+            border-color: #555;
+            background: #222;
+        }
+
+        button.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: white;
+        }
+
+        button.primary:hover {
+            background: #1d4ed8;
+        }
+
+        .status {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .status.loading {
+            color: #f59e0b;
+        }
+
+        .status.error {
+            color: #ef4444;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stat-card h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-card .subtitle {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .stat-card.coingecko .value { color: #22c55e; }
+        .stat-card.geckoterminal .value { color: #8b5cf6; }
+        .stat-card.warning .value { color: #f59e0b; }
+        .stat-card.danger .value { color: #ef4444; }
+
+        .chart-container {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .chart-container h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        .chart-wrapper {
+            height: 300px;
+            position: relative;
+        }
+
+        .table-container {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table-container h2 {
+            font-size: 16px;
+            font-weight: 600;
+            padding: 20px;
+            border-bottom: 1px solid #333;
+            color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid #252525;
+        }
+
+        th {
+            background: #151515;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #888;
+            font-weight: 600;
+        }
+
+        td {
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background: #1f1f1f;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge.coingecko {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+        }
+
+        .badge.geckoterminal {
+            background: rgba(139, 92, 246, 0.15);
+            color: #8b5cf6;
+        }
+
+        .timestamp {
+            color: #666;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .calls-rate {
+            font-family: monospace;
+        }
+
+        .calls-rate.high {
+            color: #ef4444;
+        }
+
+        .calls-rate.medium {
+            color: #f59e0b;
+        }
+
+        .calls-rate.low {
+            color: #22c55e;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #888;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .api-breakdown {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .api-breakdown h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        .api-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #252525;
+        }
+
+        .api-item:last-child {
+            border-bottom: none;
+        }
+
+        .api-item .name {
+            font-weight: 500;
+        }
+
+        .api-item .stats {
+            text-align: right;
+            font-size: 13px;
+        }
+
+        .api-item .stats .main {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .api-item .stats .sub {
+            color: #666;
+            font-size: 12px;
+        }
+
+        .config-panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .config-panel h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        .config-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .config-row label {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .config-row input {
+            flex: 1;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .config-row input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+
+        .saved-indicator {
+            font-size: 12px;
+            color: #22c55e;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .saved-indicator.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>API Rate Limit Monitor</h1>
+        <div class="controls">
+            <span class="status" id="status">Ready</span>
+            <select id="timeRange">
+                <option value="1h">Last 1 hour</option>
+                <option value="6h">Last 6 hours</option>
+                <option value="24h" selected>Last 24 hours</option>
+                <option value="7d">Last 7 days</option>
+                <option value="30d">Last 30 days</option>
+            </select>
+            <button onclick="refreshData()" class="primary">Refresh</button>
+        </div>
+    </div>
+
+    <div class="config-panel" id="configPanel">
+        <h2>Configuration</h2>
+        <div class="config-row">
+            <label>Supabase URL:</label>
+            <input type="text" id="supabaseUrl" placeholder="https://your-project.supabase.co" />
+            <span class="saved-indicator" id="savedUrl">Saved</span>
+        </div>
+        <div class="config-row" style="margin-top: 12px;">
+            <label>Anon Key:</label>
+            <input type="password" id="anonKey" placeholder="eyJhbGciOiJI..." />
+            <span class="saved-indicator" id="savedKey">Saved</span>
+        </div>
+        <p style="font-size: 12px; color: #666; margin-top: 12px;">
+            Configuration is saved in your browser's local storage.
+        </p>
+    </div>
+
+    <div class="grid" id="summaryCards">
+        <div class="stat-card">
+            <h3>Total Events</h3>
+            <div class="value" id="totalEvents">-</div>
+            <div class="subtitle">In selected period</div>
+        </div>
+        <div class="stat-card coingecko">
+            <h3>CoinGecko</h3>
+            <div class="value" id="coinGeckoEvents">-</div>
+            <div class="subtitle">Rate limit hits</div>
+        </div>
+        <div class="stat-card geckoterminal">
+            <h3>GeckoTerminal</h3>
+            <div class="value" id="geckoTerminalEvents">-</div>
+            <div class="subtitle">Rate limit hits</div>
+        </div>
+        <div class="stat-card">
+            <h3>Unique Devices</h3>
+            <div class="value" id="uniqueDevices">-</div>
+            <div class="subtitle">Affected users</div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <h2>Rate Limit Events Over Time</h2>
+        <div class="chart-wrapper">
+            <canvas id="timelineChart"></canvas>
+        </div>
+    </div>
+
+    <div class="two-col">
+        <div class="api-breakdown">
+            <h2>API Breakdown</h2>
+            <div id="apiBreakdown">
+                <div class="empty-state">
+                    <p>No data yet</p>
+                </div>
+            </div>
+        </div>
+        <div class="api-breakdown">
+            <h2>App Versions</h2>
+            <div id="appVersions">
+                <div class="empty-state">
+                    <p>No data yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <h2>Recent Events</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>API</th>
+                    <th>Endpoint</th>
+                    <th>Calls/min</th>
+                    <th>Session</th>
+                    <th>Device</th>
+                    <th>Version</th>
+                </tr>
+            </thead>
+            <tbody id="eventsTable">
+                <tr>
+                    <td colspan="7" class="empty-state">
+                        <p>Configure your Supabase credentials above to load data</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Config
+        const SUPABASE_FUNCTION_URL_SUFFIX = '/functions/v1/rate-limit-monitor';
+        let chart = null;
+
+        // Load saved config
+        function loadConfig() {
+            const savedUrl = localStorage.getItem('coinflip_supabase_url');
+            const savedKey = localStorage.getItem('coinflip_anon_key');
+
+            if (savedUrl) document.getElementById('supabaseUrl').value = savedUrl;
+            if (savedKey) document.getElementById('anonKey').value = savedKey;
+        }
+
+        // Save config on input
+        function setupConfigSaving() {
+            const urlInput = document.getElementById('supabaseUrl');
+            const keyInput = document.getElementById('anonKey');
+
+            let urlTimeout, keyTimeout;
+
+            urlInput.addEventListener('input', () => {
+                clearTimeout(urlTimeout);
+                urlTimeout = setTimeout(() => {
+                    localStorage.setItem('coinflip_supabase_url', urlInput.value);
+                    showSaved('savedUrl');
+                }, 500);
+            });
+
+            keyInput.addEventListener('input', () => {
+                clearTimeout(keyTimeout);
+                keyTimeout = setTimeout(() => {
+                    localStorage.setItem('coinflip_anon_key', keyInput.value);
+                    showSaved('savedKey');
+                }, 500);
+            });
+        }
+
+        function showSaved(id) {
+            const el = document.getElementById(id);
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 2000);
+        }
+
+        // Fetch data from Edge Function
+        async function fetchData() {
+            const supabaseUrl = document.getElementById('supabaseUrl').value.trim();
+            const anonKey = document.getElementById('anonKey').value.trim();
+
+            if (!supabaseUrl || !anonKey) {
+                throw new Error('Please configure Supabase URL and Anon Key');
+            }
+
+            const timeRange = document.getElementById('timeRange').value;
+            const functionUrl = `${supabaseUrl}${SUPABASE_FUNCTION_URL_SUFFIX}?range=${timeRange}`;
+
+            const response = await fetch(functionUrl, {
+                headers: {
+                    'Authorization': `Bearer ${anonKey}`,
+                    'apikey': anonKey
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || `HTTP ${response.status}`);
+            }
+
+            return response.json();
+        }
+
+        // Update UI with data
+        function updateUI(data) {
+            // Summary cards
+            document.getElementById('totalEvents').textContent = data.summary.totalEvents;
+            document.getElementById('coinGeckoEvents').textContent = data.summary.coinGeckoEvents;
+            document.getElementById('geckoTerminalEvents').textContent = data.summary.geckoTerminalEvents;
+            document.getElementById('uniqueDevices').textContent = data.summary.uniqueDevices;
+
+            // API breakdown
+            updateApiBreakdown(data.apiStats);
+
+            // App versions
+            updateAppVersions(data.appVersions, data.recentEvents);
+
+            // Events table
+            updateEventsTable(data.recentEvents);
+
+            // Timeline chart
+            updateChart(data.hourlyStats);
+        }
+
+        function updateApiBreakdown(stats) {
+            const container = document.getElementById('apiBreakdown');
+
+            if (!stats || stats.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No rate limit events</p></div>';
+                return;
+            }
+
+            container.innerHTML = stats.map(stat => `
+                <div class="api-item">
+                    <div class="name">
+                        <span class="badge ${stat.api_name.toLowerCase().replace(' ', '')}">${stat.api_name}</span>
+                    </div>
+                    <div class="stats">
+                        <div class="main">${stat.total_events}</div>
+                        <div class="sub">Avg ${stat.avg_calls_per_minute?.toFixed(1) || '0'} calls/min</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateAppVersions(versions, events) {
+            const container = document.getElementById('appVersions');
+
+            if (!versions || versions.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No version data</p></div>';
+                return;
+            }
+
+            // Count events per version
+            const versionCounts = {};
+            events.forEach(e => {
+                if (e.app_version) {
+                    versionCounts[e.app_version] = (versionCounts[e.app_version] || 0) + 1;
+                }
+            });
+
+            const sortedVersions = Object.entries(versionCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            container.innerHTML = sortedVersions.map(([version, count]) => `
+                <div class="api-item">
+                    <div class="name">${version}</div>
+                    <div class="stats">
+                        <div class="main">${count}</div>
+                        <div class="sub">events</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateEventsTable(events) {
+            const tbody = document.getElementById('eventsTable');
+
+            if (!events || events.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <h3>No rate limit events</h3>
+                            <p>Your users haven't hit any rate limits in this period</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = events.map(event => {
+                const timestamp = new Date(event.timestamp);
+                const timeStr = timestamp.toLocaleString();
+                const rateClass = event.calls_per_minute > 50 ? 'high' :
+                                  event.calls_per_minute > 30 ? 'medium' : 'low';
+
+                return `
+                    <tr>
+                        <td class="timestamp">${timeStr}</td>
+                        <td><span class="badge ${event.api_name.toLowerCase().replace(' ', '')}">${event.api_name}</span></td>
+                        <td>${truncate(event.endpoint, 40)}</td>
+                        <td class="calls-rate ${rateClass}">${event.calls_per_minute?.toFixed(1) || '-'}</td>
+                        <td>${formatDuration(event.session_duration_seconds)}</td>
+                        <td>${event.device_model || '-'}</td>
+                        <td>${event.app_version || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateChart(hourlyStats) {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            if (!hourlyStats || hourlyStats.length === 0) {
+                // Show empty chart
+                chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['No data'],
+                        datasets: [{
+                            label: 'Events',
+                            data: [0],
+                            backgroundColor: '#333'
+                        }]
+                    },
+                    options: getChartOptions()
+                });
+                return;
+            }
+
+            // Group by hour
+            const hours = [...new Set(hourlyStats.map(s => s.hour))].sort();
+            const coinGeckoData = hours.map(h => {
+                const stat = hourlyStats.find(s => s.hour === h && s.api_name === 'CoinGecko');
+                return stat ? stat.count : 0;
+            });
+            const geckoTerminalData = hours.map(h => {
+                const stat = hourlyStats.find(s => s.hour === h && s.api_name === 'GeckoTerminal');
+                return stat ? stat.count : 0;
+            });
+
+            const labels = hours.map(h => {
+                const date = new Date(h);
+                return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' });
+            });
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'CoinGecko',
+                            data: coinGeckoData,
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                            borderColor: '#22c55e',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'GeckoTerminal',
+                            data: geckoTerminalData,
+                            backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                            borderColor: '#8b5cf6',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: getChartOptions()
+            });
+        }
+
+        function getChartOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: {
+                            color: '#252525'
+                        },
+                        ticks: {
+                            color: '#888'
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        grid: {
+                            color: '#252525'
+                        },
+                        ticks: {
+                            color: '#888',
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#888'
+                        }
+                    }
+                }
+            };
+        }
+
+        // Helpers
+        function truncate(str, len) {
+            if (!str) return '-';
+            return str.length > len ? str.slice(0, len) + '...' : str;
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '-';
+            if (seconds < 60) return `${seconds}s`;
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}m ${secs}s`;
+        }
+
+        // Main refresh function
+        async function refreshData() {
+            const statusEl = document.getElementById('status');
+
+            try {
+                statusEl.textContent = 'Loading...';
+                statusEl.className = 'status loading';
+
+                const data = await fetchData();
+                updateUI(data);
+
+                statusEl.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                statusEl.className = 'status';
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                statusEl.textContent = `Error: ${error.message}`;
+                statusEl.className = 'status error';
+            }
+        }
+
+        // Time range change handler
+        document.getElementById('timeRange').addEventListener('change', refreshData);
+
+        // Initialize
+        loadConfig();
+        setupConfigSaving();
+
+        // Auto-refresh if config is present
+        if (localStorage.getItem('coinflip_supabase_url') && localStorage.getItem('coinflip_anon_key')) {
+            refreshData();
+        }
+
+        // Auto-refresh every 60 seconds
+        setInterval(() => {
+            if (localStorage.getItem('coinflip_supabase_url') && localStorage.getItem('coinflip_anon_key')) {
+                refreshData();
+            }
+        }, 60000);
+    </script>
+</body>
+</html>

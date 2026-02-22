@@ -22,12 +22,25 @@ struct ViralCoinsView: View {
                         .padding(.horizontal, Spacing.md)
                         .padding(.top, Spacing.md)
 
-                    // Auto-refresh indicator
-                    RefreshIndicator(
-                        secondsUntilRefresh: viewModel.secondsUntilRefresh,
-                        lastRefreshTime: viewModel.lastRefreshTime
-                    )
-                    .padding(.horizontal, Spacing.md)
+                    // Last updated indicator
+                    if let lastUpdate = viewModel.timeSinceRefresh {
+                        HStack(spacing: Spacing.xs) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.labelSmall)
+                                .foregroundColor(.textMuted)
+
+                            Text("Updated \(lastUpdate)")
+                                .font(.labelSmall)
+                                .foregroundColor(.textMuted)
+
+                            Spacer()
+
+                            Text("Pull to refresh")
+                                .font(.labelSmall)
+                                .foregroundColor(.textMuted)
+                        }
+                        .padding(.horizontal, Spacing.md)
+                    }
 
                     if viewModel.isLoading && viewModel.viralCoins.isEmpty {
                         LoadingViralCoinsView()
@@ -41,7 +54,7 @@ struct ViralCoinsView: View {
                         EmptyViralCoinsView()
                     } else {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Text("🔥 Viral Coins (Last Hour)")
+                            Text("Viral Coins (Last Hour)")
                                 .font(.headline3)
                                 .foregroundColor(.textPrimary)
                                 .padding(.horizontal, Spacing.md)
@@ -66,7 +79,7 @@ struct ViralCoinsView: View {
                     coin: coin,
                     availableCash: homeViewModel.portfolio.cashBalance
                 ) { amount in
-                    homeViewModel.buy(coin: coin, amount: amount)
+                    await homeViewModel.buy(coin: coin, amount: amount)
                 }
                 .presentationDetents([.large])
             }
@@ -74,14 +87,10 @@ struct ViralCoinsView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
-            if viewModel.viralCoins.isEmpty {
-                Task {
-                    await viewModel.loadViralCoins()
-                }
+            // Only refresh if data is stale (>2 min old) or empty
+            Task {
+                await viewModel.refreshIfStale()
             }
-        }
-        .onDisappear {
-            // Don't stop auto-refresh when view disappears to keep data fresh
         }
     }
 }
@@ -116,41 +125,6 @@ private struct WarningBanner: View {
             RoundedRectangle(cornerRadius: Spacing.sm)
                 .stroke(Color.blue.opacity(0.3), lineWidth: 1)
         )
-    }
-}
-
-// MARK: - Refresh Indicator
-
-private struct RefreshIndicator: View {
-    let secondsUntilRefresh: Int
-    let lastRefreshTime: Date?
-
-    var body: some View {
-        HStack(spacing: Spacing.xs) {
-            Image(systemName: "arrow.clockwise")
-                .font(.labelSmall)
-                .foregroundColor(.textSecondary)
-
-            if let lastRefresh = lastRefreshTime {
-                Text("Updated \(lastRefresh.timeAgo)")
-                    .font(.labelSmall)
-                    .foregroundColor(.textSecondary)
-            }
-
-            Spacer()
-
-            Text("Next: \(secondsUntilRefresh)s")
-                .font(.labelSmall)
-                .foregroundColor(.primaryGreen)
-                .padding(.horizontal, Spacing.sm)
-                .padding(.vertical, Spacing.xxs)
-                .background(Color.primaryGreen.opacity(0.1))
-                .cornerRadius(Spacing.xxs)
-        }
-        .padding(.horizontal, Spacing.md)
-        .padding(.vertical, Spacing.sm)
-        .background(Color.cardBackground)
-        .cornerRadius(Spacing.sm)
     }
 }
 
@@ -225,22 +199,6 @@ private struct ErrorStateView: View {
         }
         .padding(Spacing.xl)
         .frame(maxWidth: .infinity, minHeight: 300)
-    }
-}
-
-// MARK: - Helper Extension
-
-private extension Date {
-    var timeAgo: String {
-        let interval = Date().timeIntervalSince(self)
-
-        if interval < 60 {
-            return "\(Int(interval))s ago"
-        } else if interval < 3600 {
-            return "\(Int(interval / 60))m ago"
-        } else {
-            return "\(Int(interval / 3600))h ago"
-        }
     }
 }
 

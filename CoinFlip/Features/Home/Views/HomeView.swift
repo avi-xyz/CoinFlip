@@ -58,7 +58,7 @@ struct HomeView: View {
                     coin: coin,
                     availableCash: viewModel.portfolio.cashBalance
                 ) { amount in
-                    viewModel.buy(coin: coin, amount: amount)
+                    await viewModel.buy(coin: coin, amount: amount)
                 }
                 .presentationDetents([.large])
             }

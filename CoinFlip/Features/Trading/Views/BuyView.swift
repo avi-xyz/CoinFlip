@@ -3,13 +3,15 @@ import SwiftUI
 struct BuyView: View {
     let coin: Coin
     let availableCash: Double
-    let onBuy: (Double) -> Bool
+    let onBuy: (Double) async -> HomeViewModel.BuyResult
 
     @Environment(\.dismiss) private var dismiss
     @State private var amount: Double = 50
     @State private var showConfirmation = false
     @State private var purchaseSuccess = false
     @State private var showConfetti = false
+    @State private var isPurchasing = false
+    @State private var errorMessage: String? = nil
     @State private var ohlcvData: [Double]? = nil
     @State private var isLoadingChart = false
     @State private var chartError: String? = nil
@@ -143,11 +145,13 @@ struct BuyView: View {
                     }
 
                     // Buy Button
-                    PrimaryButton(title: "Confirm Purchase") {
-                        executePurchase()
+                    PrimaryButton(title: isPurchasing ? "Processing..." : "Confirm Purchase") {
+                        Task {
+                            await executePurchase()
+                        }
                     }
-                    .disabled(amount < 10 || amount > availableCash)
-                    .opacity(amount < 10 || amount > availableCash ? 0.5 : 1.0)
+                    .disabled(amount < 10 || amount > availableCash || isPurchasing)
+                    .opacity(amount < 10 || amount > availableCash || isPurchasing ? 0.5 : 1.0)
                     .accessibilityIdentifier("confirmBuyButton")
 
                     if amount < 10 {
@@ -190,10 +194,11 @@ struct BuyView: View {
                             .foregroundColor(.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        Text("Something went wrong. Please try again.")
+                        Text(errorMessage ?? "Something went wrong. Please try again.")
                             .font(.bodyLarge)
                             .foregroundColor(.textSecondary)
                             .multilineTextAlignment(.center)
+                            .padding(.horizontal, Spacing.md)
                     }
 
                     PrimaryButton(title: "Done") {
@@ -235,16 +240,38 @@ struct BuyView: View {
         }
     }
 
-    private func executePurchase() {
+    private func executePurchase() async {
         HapticManager.shared.impact(.medium)
-        purchaseSuccess = onBuy(amount)
+        isPurchasing = true
+        errorMessage = nil
 
-        if purchaseSuccess {
+        let result = await onBuy(amount)
+
+        switch result {
+        case .success:
+            purchaseSuccess = true
             showConfetti = true
             HapticManager.shared.success()
-        } else {
+
+        case .insufficientFunds:
+            purchaseSuccess = false
+            errorMessage = "Insufficient funds. Please reduce the purchase amount."
+            HapticManager.shared.error()
+
+        case .invalidAmount:
+            purchaseSuccess = false
+            errorMessage = "Invalid purchase amount. Please try again."
+            HapticManager.shared.error()
+
+        case .persistenceFailed(let details):
+            purchaseSuccess = false
+            // Show user-friendly message but log details
+            print("❌ Purchase persistence failed: \(details)")
+            errorMessage = "Failed to save your purchase. Please check your connection and try again."
             HapticManager.shared.error()
         }
+
+        isPurchasing = false
 
         withAnimation {
             showConfirmation = true
@@ -388,6 +415,6 @@ private struct PriceChartCard: View {
     BuyView(
         coin: MockData.featuredCoin,
         availableCash: 1000,
-        onBuy: { _ in true }
+        onBuy: { _ in .success }
     )
 }

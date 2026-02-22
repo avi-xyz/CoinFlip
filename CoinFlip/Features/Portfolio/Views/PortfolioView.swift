@@ -203,7 +203,7 @@ struct PortfolioView: View {
                     coin: coin,
                     currentPrice: currentPrice
                 ) { quantity in
-                    viewModel.sell(holding: holding, quantity: quantity)
+                    await viewModel.sell(holding: holding, quantity: quantity)
                 }
                 .presentationDetents([.large])
                 .task {

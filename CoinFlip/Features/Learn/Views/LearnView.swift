@@ -48,7 +48,7 @@ struct LearnView: View {
                     LearnSection(
                         icon: "💰",
                         title: "Buying & Selling",
-                        content: "Buy low, sell high—that's the goal! Your profit or loss is the difference between what you paid (buy price) and what you receive (sell price). In CoinFlip, practice this risk-free with virtual money."
+                        content: "Buy low, sell high—that's the goal! Your profit or loss is the difference between what you paid (buy price) and what you receive (sell price). In CoinDojo, practice this risk-free with virtual money."
                     )
 
                     LearnSection(
@@ -60,7 +60,7 @@ struct LearnView: View {
                     LearnSection(
                         icon: "💸",
                         title: "Understanding Profit/Loss",
-                        content: "If you bought a coin for $100 and it's now worth $150, you have a $50 profit (50% gain). If it's worth $75, you have a $25 loss (25% loss). In CoinFlip, these are unrealized until you sell."
+                        content: "If you bought a coin for $100 and it's now worth $150, you have a $50 profit (50% gain). If it's worth $75, you have a $25 loss (25% loss). In CoinDojo, these are unrealized until you sell."
                     )
 
                     // Advanced Concepts
@@ -73,14 +73,14 @@ struct LearnView: View {
                     LearnSection(
                         icon: "🌐",
                         title: "Multi-Chain Trading",
-                        content: "Coins can exist on different blockchains. The same token might be on Ethereum (slower, expensive) and Solana (faster, cheaper). Each chain has different fees and speeds. CoinFlip shows you which chain each coin is on."
+                        content: "Coins can exist on different blockchains. The same token might be on Ethereum (slower, expensive) and Solana (faster, cheaper). Each chain has different fees and speeds. CoinDojo shows you which chain each coin is on."
                     )
 
                     // Strategy
                     LearnSection(
                         icon: "🎯",
                         title: "Basic Trading Strategies",
-                        content: "1. HODL: Buy and hold long-term. 2. Day Trading: Buy/sell frequently. 3. Dollar-Cost Averaging: Invest regularly over time. 4. Diversification: Spread money across different coins. Try all strategies in CoinFlip!"
+                        content: "1. HODL: Buy and hold long-term. 2. Day Trading: Buy/sell frequently. 3. Dollar-Cost Averaging: Invest regularly over time. 4. Diversification: Spread money across different coins. Try all strategies in CoinDojo!"
                     )
 
                     LearnSection(
@@ -126,11 +126,11 @@ struct IntroCard: View {
                         .foregroundColor(.textPrimary)
                 }
 
-                Text("You're in the right place! This guide explains everything you need to know to start trading in CoinFlip. All the concepts you learn here apply to real crypto trading too.")
+                Text("You're in the right place! This guide explains everything you need to know to start trading in CoinDojo. All the concepts you learn here apply to real crypto trading too.")
                     .font(.bodyMedium)
                     .foregroundColor(.textSecondary)
 
-                Text("Remember: CoinFlip uses virtual money. It's a safe space to learn, make mistakes, and build confidence before considering real trading.")
+                Text("Remember: CoinDojo uses virtual money. It's a safe space to learn, make mistakes, and build confidence before considering real trading.")
                     .font(.bodySmall)
                     .foregroundColor(.textMuted)
                     .italic()
@@ -181,7 +181,7 @@ struct DisclaimerCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    BulletPoint(text: "CoinFlip uses VIRTUAL money only")
+                    BulletPoint(text: "CoinDojo uses VIRTUAL money only")
                     BulletPoint(text: "All trades are simulated—not real")
                     BulletPoint(text: "This is NOT financial advice")
                     BulletPoint(text: "Real crypto trading involves significant risk")
@@ -189,7 +189,7 @@ struct DisclaimerCard: View {
                     BulletPoint(text: "Do your own research before real trading")
                 }
 
-                Text("CoinFlip is an educational tool. Consult licensed financial advisors before making real investment decisions.")
+                Text("CoinDojo is an educational tool. Consult licensed financial advisors before making real investment decisions.")
                     .font(.bodySmall)
                     .foregroundColor(.textMuted)
                     .italic()

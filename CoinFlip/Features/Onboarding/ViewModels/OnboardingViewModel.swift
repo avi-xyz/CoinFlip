@@ -13,7 +13,7 @@ class OnboardingViewModel: ObservableObject {
     @Published var pages: [OnboardingPageData] = [
         OnboardingPageData(
             emoji: "🪙",
-            title: "Welcome to CoinFlip",
+            title: "Welcome to CoinDojo",
             subtitle: "Learn crypto trading with virtual money. No risk, all the fun!"
         ),
         OnboardingPageData(

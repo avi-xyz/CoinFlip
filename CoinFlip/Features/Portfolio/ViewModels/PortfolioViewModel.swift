@@ -241,7 +241,16 @@ class PortfolioViewModel: ObservableObject {
         }
     }
 
-    func sell(holding: Holding, quantity: Double) -> Bool {
+    /// Sell result to communicate success/failure back to UI
+    enum SellResult {
+        case success
+        case invalidQuantity
+        case persistenceFailed(String)
+    }
+
+    /// Sell a holding - waits for database confirmation before updating local state
+    /// Returns a SellResult indicating success or the type of failure
+    func sell(holding: Holding, quantity: Double) async -> SellResult {
         print("💰 PortfolioViewModel.sell() - START")
         print("   📊 Before sell:")
         print("      - Cash balance: $\(portfolio.cashBalance)")
@@ -249,6 +258,12 @@ class PortfolioViewModel: ObservableObject {
         print("      - Total holdings value: $\(totalHoldingsValue)")
         print("      - Net worth: $\(portfolio.cashBalance + totalHoldingsValue)")
         print("   🪙 Selling: \(holding.coinSymbol) qty=\(quantity)")
+
+        // Validate quantity
+        guard quantity > 0, quantity <= holding.quantity else {
+            print("   ❌ Sell failed - invalid quantity")
+            return .invalidQuantity
+        }
 
         // Check if this is a complete sell BEFORE modifying portfolio
         let isCompleteSell = (holding.quantity - quantity) < 0.00000001
@@ -282,38 +297,14 @@ class PortfolioViewModel: ObservableObject {
         var updatedPortfolio = portfolio
         guard let transaction = updatedPortfolio.sell(coin: coin, quantity: quantity) else {
             print("   ❌ Sell failed - validation error")
-            return false
+            return .invalidQuantity
         }
 
-        print("   📊 After sell:")
+        print("   📊 After sell (pending DB confirmation):")
         print("      - Cash balance: $\(updatedPortfolio.cashBalance)")
         print("      - Holdings count: \(updatedPortfolio.holdings.count)")
 
-        // Update local state first
-        portfolio = updatedPortfolio
-
-        // Recalculate totals with updated portfolio
-        print("      - Total holdings value: $\(totalHoldingsValue)")
-        print("      - Net worth: $\(portfolio.cashBalance + totalHoldingsValue)")
-        print("💰 PortfolioViewModel.sell() - END (local update complete)")
-
-        HapticManager.shared.success()
-
-        // Persist to Supabase in background
-        Task {
-            await persistSellTransaction(
-                transaction: transaction,
-                updatedPortfolio: updatedPortfolio,
-                holdingId: holdingId,
-                isCompleteSell: isCompleteSell
-            )
-        }
-
-        return true
-    }
-
-    /// Persist sell transaction to Supabase
-    private func persistSellTransaction(transaction: Transaction, updatedPortfolio: Portfolio, holdingId: UUID, isCompleteSell: Bool) async {
+        // Persist to database FIRST - wait for confirmation
         do {
             print("💾 PortfolioViewModel: Persisting sell transaction to Supabase...")
             print("   🔍 Transaction type: \(isCompleteSell ? "Complete sell (delete holding)" : "Partial sell (update holding)")")
@@ -346,23 +337,24 @@ class PortfolioViewModel: ObservableObject {
 
             print("✅ PortfolioViewModel: Sell transaction persisted successfully")
 
-            // Reload portfolio from database to ensure sync
-            if let userId = AuthService.shared.currentUser?.id {
-                let reloadedPortfolio = try await dataService.fetchPortfolio(userId: userId)
-                await MainActor.run {
-                    print("   🔄 Reloading portfolio from database...")
-                    print("      - DB cash balance: $\(reloadedPortfolio.cashBalance)")
-                    print("      - DB holdings count: \(reloadedPortfolio.holdings.count)")
-                    self.portfolio = reloadedPortfolio
-                    print("      - Portfolio view total holdings value: $\(self.totalHoldingsValue)")
-                    print("      - Portfolio view net worth: $\(self.portfolio.cashBalance + self.totalHoldingsValue)")
-                    print("   ✅ Portfolio reloaded from database")
-                }
-            }
+            // NOW update local state (after DB confirmation)
+            portfolio = updatedPortfolio
+
+            // Recalculate totals with updated portfolio
+            print("      - Total holdings value: $\(totalHoldingsValue)")
+            print("      - Net worth: $\(portfolio.cashBalance + totalHoldingsValue)")
+            print("💰 PortfolioViewModel.sell() - END (success)")
+
+            HapticManager.shared.success()
+            return .success
+
         } catch {
             print("❌ PortfolioViewModel: Failed to persist sell transaction - \(error.localizedDescription)")
             print("   Error details: \(error)")
-            // TODO: Could implement retry logic or show error to user
+
+            // Don't update local state - the transaction failed
+            HapticManager.shared.error()
+            return .persistenceFailed(error.localizedDescription)
         }
     }
 }

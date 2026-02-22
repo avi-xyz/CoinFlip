@@ -80,7 +80,7 @@ struct ProfileView: View {
                             title: "Help & Support",
                             iconColor: .primaryPurple
                         ) {
-                            if let url = URL(string: "mailto:avinashgdn@gmail.com?subject=CoinFlip%20Support") {
+                            if let url = URL(string: "mailto:avinashgdn@gmail.com?subject=CoinDojo%20Support") {
                                 UIApplication.shared.open(url)
                             }
                             HapticManager.shared.impact(.light)
@@ -91,7 +91,7 @@ struct ProfileView: View {
                             title: "Terms of Service",
                             iconColor: .textSecondary
                         ) {
-                            if let url = URL(string: "https://avi-xyz.github.io/CoinFlip/terms-of-service.html") {
+                            if let url = URL(string: "https://avi-xyz.github.io/CoinDojo/terms-of-service.html") {
                                 UIApplication.shared.open(url)
                             }
                             HapticManager.shared.impact(.light)
@@ -102,7 +102,7 @@ struct ProfileView: View {
                             title: "Privacy Policy",
                             iconColor: .textSecondary
                         ) {
-                            if let url = URL(string: "https://avi-xyz.github.io/CoinFlip/privacy-policy.html") {
+                            if let url = URL(string: "https://avi-xyz.github.io/CoinDojo/privacy-policy.html") {
                                 UIApplication.shared.open(url)
                             }
                             HapticManager.shared.impact(.light)

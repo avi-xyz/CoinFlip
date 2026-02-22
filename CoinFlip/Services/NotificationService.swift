@@ -78,7 +78,7 @@ class NotificationService: ObservableObject {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "CoinFlip"
+        content.title = "CoinDojo"
         content.body = "Test notification - notifications are working! 🎉"
         content.sound = .default
 

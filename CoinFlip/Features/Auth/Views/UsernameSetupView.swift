@@ -42,7 +42,7 @@ struct UsernameSetupView: View {
 
                 // Title
                 VStack(spacing: Spacing.md) {
-                    Text("Welcome to CoinFlip!")
+                    Text("Welcome to CoinDojo!")
                         .font(.headline1)
                         .foregroundColor(.textPrimary)
 

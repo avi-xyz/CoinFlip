@@ -15,23 +15,12 @@ class ViralCoinsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var lastRefreshTime: Date?
-    @Published var secondsUntilRefresh: Int = 30
 
     private let geckoTerminalAPI: GeckoTerminalService
-    private var cancellables = Set<AnyCancellable>()
-    private var refreshTimer: Timer?
-    private var countdownTimer: Timer?
+    private let staleDuration: TimeInterval = 120 // 2 minutes
 
     init(geckoTerminalAPI: GeckoTerminalService = .shared) {
         self.geckoTerminalAPI = geckoTerminalAPI
-    }
-
-    convenience init() {
-        self.init(geckoTerminalAPI: GeckoTerminalService.shared)
-        Task { @MainActor in
-            await loadViralCoins()
-            startAutoRefresh()
-        }
     }
 
     // MARK: - Public Methods
@@ -47,7 +36,6 @@ class ViralCoinsViewModel: ObservableObject {
 
             self.viralCoins = coins
             self.lastRefreshTime = Date()
-            self.secondsUntilRefresh = 30
 
             print("✅ ViralCoinsViewModel: Loaded \(coins.count) viral coins")
         } catch {
@@ -58,58 +46,52 @@ class ViralCoinsViewModel: ObservableObject {
         isLoading = false
     }
 
-    /// Manually refresh viral coins
+    /// Refresh viral coins if data is stale (older than 2 minutes)
+    /// Called on view appear - avoids unnecessary API calls
+    func refreshIfStale() async {
+        // Skip if already loading
+        guard !isLoading else {
+            print("⏳ ViralCoinsViewModel: Already loading, skipping refresh")
+            return
+        }
+
+        // Check if data is stale
+        if let lastRefresh = lastRefreshTime {
+            let timeSinceRefresh = Date().timeIntervalSince(lastRefresh)
+            if timeSinceRefresh < staleDuration {
+                print("✅ ViralCoinsViewModel: Data is fresh (\(Int(timeSinceRefresh))s old), skipping refresh")
+                return
+            }
+            print("🔄 ViralCoinsViewModel: Data is stale (\(Int(timeSinceRefresh))s old), refreshing...")
+        } else {
+            print("🔄 ViralCoinsViewModel: No data yet, loading...")
+        }
+
+        await loadViralCoins()
+    }
+
+    /// Manual refresh (pull-to-refresh) - always refreshes
     func refresh() async {
         await loadViralCoins()
-        resetCountdown()
     }
 
-    /// Start auto-refresh timer (every 30 seconds)
-    func startAutoRefresh() {
-        stopAutoRefresh() // Clear any existing timer
+    /// Check if data is stale
+    var isStale: Bool {
+        guard let lastRefresh = lastRefreshTime else { return true }
+        return Date().timeIntervalSince(lastRefresh) >= staleDuration
+    }
 
-        // Refresh every 30 seconds
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.loadViralCoins()
-            }
+    /// Time since last refresh (for display)
+    var timeSinceRefresh: String? {
+        guard let lastRefresh = lastRefreshTime else { return nil }
+        let interval = Date().timeIntervalSince(lastRefresh)
+
+        if interval < 60 {
+            return "\(Int(interval))s ago"
+        } else if interval < 3600 {
+            return "\(Int(interval / 60))m ago"
+        } else {
+            return "\(Int(interval / 3600))h ago"
         }
-
-        // Countdown timer (every second)
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self else { return }
-
-                if self.secondsUntilRefresh > 0 {
-                    self.secondsUntilRefresh -= 1
-                } else {
-                    self.secondsUntilRefresh = 30
-                }
-            }
-        }
-
-        print("⏰ ViralCoinsViewModel: Auto-refresh started (30s interval)")
-    }
-
-    /// Stop auto-refresh timer
-    nonisolated func stopAutoRefresh() {
-        Task { @MainActor in
-            refreshTimer?.invalidate()
-            refreshTimer = nil
-            countdownTimer?.invalidate()
-            countdownTimer = nil
-            print("⏸️ ViralCoinsViewModel: Auto-refresh stopped")
-        }
-    }
-
-    /// Reset countdown to 30 seconds
-    private func resetCountdown() {
-        secondsUntilRefresh = 30
-    }
-
-    // MARK: - Cleanup
-
-    deinit {
-        stopAutoRefresh()
     }
 }

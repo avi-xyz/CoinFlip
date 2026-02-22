@@ -154,7 +154,7 @@ class GeckoTerminalService {
         // Convert to our Coin model and apply viral filtering
         var allCoins = poolsResponse.data.compactMap { $0.toCoin() }
 
-        // Fetch coin images from CoinGecko (best effort, don't fail if unavailable)
+        // Fetch coin images (uses persistent cache - only fetches new coins)
         await enrichCoinsWithImages(&allCoins)
 
         // Filter for viral coins based on criteria
@@ -171,45 +171,76 @@ class GeckoTerminalService {
         return Array(sortedCoins.prefix(limit))
     }
 
-    /// Enrich coins with images from CoinGecko search API
-    private func enrichCoinsWithImages(_ coins: inout [Coin]) async {
-        print("   🖼️  Fetching coin images from CoinGecko...")
+    // MARK: - Image Enrichment (with persistent caching)
 
-        // Process in batches to avoid rate limiting
+    /// Persistent cache for coin images (symbol -> URL string)
+    private var imageCache: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "coinImageCache") as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "coinImageCache") }
+    }
+
+    /// Enrich coins with images - uses persistent cache, only fetches new coins
+    private func enrichCoinsWithImages(_ coins: inout [Coin]) async {
+        var cache = imageCache
+        var fetchCount = 0
+
         for (index, coin) in coins.enumerated() {
+            let symbolKey = coin.symbol.uppercased()
+
+            // Check persistent cache first
+            if let cachedURLString = cache[symbolKey],
+               let cachedURL = URL(string: cachedURLString) {
+                // Use cached image
+                coins[index] = coinWithImage(coin, imageURL: cachedURL)
+                continue
+            }
+
+            // Not in cache - fetch from CoinGecko (rate limited)
             guard let imageURL = await fetchCoinImageFromCoinGecko(symbol: coin.symbol) else {
                 continue
             }
 
-            // Update coin with image URL
-            coins[index] = Coin(
-                id: coin.id,
-                symbol: coin.symbol,
-                name: coin.name,
-                image: imageURL,
-                currentPrice: coin.currentPrice,
-                priceChange24h: coin.priceChange24h,
-                priceChangePercentage24h: coin.priceChangePercentage24h,
-                marketCap: coin.marketCap,
-                sparklineIn7d: coin.sparklineIn7d,
-                poolCreatedAt: coin.poolCreatedAt,
-                priceChangeH1: coin.priceChangeH1,
-                hourlyBuys: coin.hourlyBuys,
-                hourlySells: coin.hourlySells,
-                txnsH1: coin.txnsH1,
-                volumeH1: coin.volumeH1,
-                chainId: coin.chainId,
-                isViral: coin.isViral
-            )
+            // Update coin and cache
+            coins[index] = coinWithImage(coin, imageURL: imageURL)
+            cache[symbolKey] = imageURL.absoluteString
+            fetchCount += 1
 
-            // Small delay to respect rate limits (10-30 calls/min on free tier)
-            if index < coins.count - 1 {
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
+            // Small delay between API calls to respect rate limits
+            if fetchCount < coins.count {
+                try? await Task.sleep(nanoseconds: 150_000_000) // 0.15 second delay
             }
         }
 
-        let imagesFound = coins.filter { $0.image != nil }.count
-        print("   ✅ Found images for \(imagesFound)/\(coins.count) coins")
+        // Save updated cache
+        if fetchCount > 0 {
+            imageCache = cache
+            print("   🖼️  Fetched \(fetchCount) new coin images (cached \(cache.count) total)")
+        } else {
+            print("   🖼️  All \(coins.count) coin images loaded from cache")
+        }
+    }
+
+    /// Create a new Coin with the given image URL
+    private func coinWithImage(_ coin: Coin, imageURL: URL) -> Coin {
+        Coin(
+            id: coin.id,
+            symbol: coin.symbol,
+            name: coin.name,
+            image: imageURL,
+            currentPrice: coin.currentPrice,
+            priceChange24h: coin.priceChange24h,
+            priceChangePercentage24h: coin.priceChangePercentage24h,
+            marketCap: coin.marketCap,
+            sparklineIn7d: coin.sparklineIn7d,
+            poolCreatedAt: coin.poolCreatedAt,
+            priceChangeH1: coin.priceChangeH1,
+            hourlyBuys: coin.hourlyBuys,
+            hourlySells: coin.hourlySells,
+            txnsH1: coin.txnsH1,
+            volumeH1: coin.volumeH1,
+            chainId: coin.chainId,
+            isViral: coin.isViral
+        )
     }
 
     /// Fetch coin image from CoinGecko search API
@@ -218,7 +249,7 @@ class GeckoTerminalService {
 
         guard let url = URL(string: searchURL) else { return nil }
 
-        // Note: This is a CoinGecko call, not GeckoTerminal
+        // Track this as a CoinGecko call
         CryptoAPIService.shared.trackExternalCall(endpoint: "search (image)")
 
         do {
@@ -234,7 +265,6 @@ class GeckoTerminalService {
             }
         } catch {
             // Silently fail - images are best effort
-            return nil
         }
 
         return nil

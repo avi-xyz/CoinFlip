@@ -49,15 +49,8 @@ class HomeViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Pre-populate viral cache in background for price lookups
-        Task {
-            do {
-                _ = try await viralAPI.fetchViralCoins(limit: 20, forceRefresh: false)
-                print("💾 Viral cache pre-populated for price lookups")
-            } catch {
-                // Silent failure - cache will be populated later
-            }
-        }
+        // Note: Viral cache will be populated when user visits Viral Coins tab
+        // No need to pre-fetch on app launch - saves API calls
     }
 
     convenience init() {
@@ -440,42 +433,39 @@ class HomeViewModel: ObservableObject {
         print("🔄 HomeViewModel: Featured coin state reset")
     }
 
-    func buy(coin: Coin, amount: Double) -> Bool {
-        var updatedPortfolio = portfolio
-        guard let transaction = updatedPortfolio.buy(coin: coin, amount: amount) else {
-            print("❌ HomeViewModel: Buy failed - insufficient funds or invalid amount")
-            return false
-        }
-
-        // Update local state first
-        portfolio = updatedPortfolio
-        currentPrices[coin.id] = coin.currentPrice
-
-        // IMPORTANT: For viral coins, ALSO store price by symbol (holdings use symbol as fallback)
-        if coin.isViral {
-            currentPrices[coin.symbol.uppercased()] = coin.currentPrice
-            print("🔥 HomeViewModel: Caching viral coin price by ID '\(coin.id)' AND symbol '\(coin.symbol)' = $\(coin.currentPrice)")
-        }
-
-        Task {
-            await calculatePortfolioMetrics()
-        }
-
-        // Persist to Supabase in background
-        Task {
-            await persistBuyTransaction(transaction: transaction, updatedPortfolio: updatedPortfolio)
-        }
-
-        HapticManager.shared.success()
-        return true
+    /// Buy result to communicate success/failure back to UI
+    enum BuyResult {
+        case success
+        case insufficientFunds
+        case invalidAmount
+        case persistenceFailed(String)
     }
 
-    /// Persist buy transaction to Supabase
-    private func persistBuyTransaction(transaction: Transaction, updatedPortfolio: Portfolio) async {
+    /// Buy a coin - waits for database confirmation before updating local state
+    /// Returns a BuyResult indicating success or the type of failure
+    func buy(coin: Coin, amount: Double) async -> BuyResult {
+        // Validate inputs first
+        guard amount > 0 else {
+            print("❌ HomeViewModel: Buy failed - invalid amount")
+            return .invalidAmount
+        }
+        guard amount <= portfolio.cashBalance else {
+            print("❌ HomeViewModel: Buy failed - insufficient funds")
+            return .insufficientFunds
+        }
+
+        // Create the transaction and updated portfolio (but don't apply yet)
+        var updatedPortfolio = portfolio
+        guard let transaction = updatedPortfolio.buy(coin: coin, amount: amount) else {
+            print("❌ HomeViewModel: Buy failed - transaction creation failed")
+            return .invalidAmount
+        }
+
+        // Persist to database FIRST - wait for confirmation
         do {
             print("💾 HomeViewModel: Persisting transaction to Supabase...")
 
-            // 1. Create transaction
+            // 1. Create transaction record
             _ = try await dataService.createTransaction(transaction)
             print("   ✅ Transaction created: \(transaction.coinId) x \(transaction.quantity)")
 
@@ -494,10 +484,63 @@ class HomeViewModel: ObservableObject {
             print("   ✅ Portfolio updated: cash balance = $\(updatedPortfolio.cashBalance)")
 
             print("✅ HomeViewModel: Transaction persisted successfully")
+
+            // NOW update local state (after DB confirmation)
+            portfolio = updatedPortfolio
+            currentPrices[coin.id] = coin.currentPrice
+
+            // For viral coins, also store price by symbol (holdings use symbol as fallback)
+            if coin.isViral {
+                currentPrices[coin.symbol.uppercased()] = coin.currentPrice
+                print("🔥 HomeViewModel: Caching viral coin price by ID '\(coin.id)' AND symbol '\(coin.symbol)' = $\(coin.currentPrice)")
+            }
+
+            await calculatePortfolioMetrics()
+
+            HapticManager.shared.success()
+            return .success
+
         } catch {
             print("❌ HomeViewModel: Failed to persist transaction - \(error.localizedDescription)")
             print("   Error details: \(error)")
-            // TODO: Could implement retry logic or show error to user
+
+            // Don't update local state - the transaction failed
+            HapticManager.shared.error()
+            return .persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    /// Legacy synchronous buy for backward compatibility (deprecated)
+    /// Use async buy() instead for proper error handling
+    @available(*, deprecated, message: "Use async buy() instead for proper error handling")
+    func buySync(coin: Coin, amount: Double) -> Bool {
+        var updatedPortfolio = portfolio
+        guard let transaction = updatedPortfolio.buy(coin: coin, amount: amount) else {
+            return false
+        }
+        portfolio = updatedPortfolio
+        currentPrices[coin.id] = coin.currentPrice
+        if coin.isViral {
+            currentPrices[coin.symbol.uppercased()] = coin.currentPrice
+        }
+        Task {
+            await calculatePortfolioMetrics()
+            await persistBuyTransactionLegacy(transaction: transaction, updatedPortfolio: updatedPortfolio)
+        }
+        HapticManager.shared.success()
+        return true
+    }
+
+    /// Legacy persist method for backward compatibility
+    private func persistBuyTransactionLegacy(transaction: Transaction, updatedPortfolio: Portfolio) async {
+        do {
+            _ = try await dataService.createTransaction(transaction)
+            if let holding = updatedPortfolio.holdings.first(where: { $0.coinId == transaction.coinId }) {
+                _ = try await dataService.upsertHolding(holding)
+            }
+            _ = try await dataService.updatePortfolio(updatedPortfolio)
+        } catch {
+            print("❌ HomeViewModel: Failed to persist transaction - \(error.localizedDescription)")
         }
     }
 
