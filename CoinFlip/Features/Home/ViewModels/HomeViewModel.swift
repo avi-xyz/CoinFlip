@@ -497,12 +497,26 @@ class HomeViewModel: ObservableObject {
 
             await calculatePortfolioMetrics()
 
+            // Track successful buy
+            AnalyticsService.shared.trackBuySuccess(
+                coinSymbol: coin.symbol,
+                amount: amount,
+                price: coin.currentPrice
+            )
+
             HapticManager.shared.success()
             return .success
 
         } catch {
             print("❌ HomeViewModel: Failed to persist transaction - \(error.localizedDescription)")
             print("   Error details: \(error)")
+
+            // Track failed buy
+            AnalyticsService.shared.trackBuyFailed(
+                coinSymbol: coin.symbol,
+                amount: amount,
+                error: error.localizedDescription
+            )
 
             // Don't update local state - the transaction failed
             HapticManager.shared.error()

@@ -3,11 +3,15 @@ import Supabase
 
 @main
 struct CoinFlipApp: App {
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // Initialize Supabase service on app launch
         // This ensures the singleton is created and configured early
         _ = SupabaseService.shared
+
+        // Initialize Analytics service
+        _ = AnalyticsService.shared
 
         // Verify configuration in debug builds
         #if DEBUG
@@ -43,6 +47,29 @@ struct CoinFlipApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    handleScenePhaseChange(from: oldPhase, to: newPhase)
+                }
+        }
+    }
+
+    private func handleScenePhaseChange(from oldPhase: ScenePhase, to newPhase: ScenePhase) {
+        Task { @MainActor in
+            switch newPhase {
+            case .active:
+                if oldPhase == .inactive || oldPhase == .background {
+                    AnalyticsService.shared.trackAppForeground()
+                } else {
+                    // Initial app launch
+                    AnalyticsService.shared.trackAppOpen()
+                }
+            case .background:
+                AnalyticsService.shared.trackAppBackground()
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
         }
     }
 }

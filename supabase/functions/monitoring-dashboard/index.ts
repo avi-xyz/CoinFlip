@@ -1,0 +1,511 @@
+// Supabase Edge Function: Monitoring Dashboard
+// Serves a live dashboard with app usage and error monitoring
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const url = new URL(req.url);
+  const path = url.pathname.split("/").pop();
+
+  // API endpoints
+  if (path === "api") {
+    return await handleApiRequest(req);
+  }
+
+  // Serve dashboard HTML
+  return new Response(getDashboardHTML(), {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/html; charset=utf-8",
+    },
+  });
+});
+
+async function handleApiRequest(req: Request): Promise<Response> {
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const lastHour = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+
+    // Fetch all metrics in parallel
+    const [
+      totalUsersResult,
+      todaySessionsResult,
+      last24hEventsResult,
+      rateLimitEventsResult,
+      recentErrorsResult,
+      dailyMetricsResult,
+      recentTradesResult,
+      activeSessionsResult,
+    ] = await Promise.all([
+      // Total users
+      supabase.from("users").select("id", { count: "exact", head: true }),
+
+      // Today's sessions
+      supabase
+        .from("app_sessions")
+        .select("id", { count: "exact", head: true })
+        .gte("started_at", today),
+
+      // Last 24h events by type
+      supabase
+        .from("analytics_events")
+        .select("event_type")
+        .gte("timestamp", last24Hours),
+
+      // Rate limit events (last 24h)
+      supabase
+        .from("api_rate_limit_events")
+        .select("*")
+        .gte("timestamp", last24Hours)
+        .order("timestamp", { ascending: false })
+        .limit(50),
+
+      // Recent errors (last 24h)
+      supabase
+        .from("analytics_events")
+        .select("*")
+        .eq("event_type", "error")
+        .gte("timestamp", last24Hours)
+        .order("timestamp", { ascending: false })
+        .limit(20),
+
+      // Daily metrics (last 7 days)
+      supabase
+        .from("daily_metrics")
+        .select("*")
+        .gte("date", last7Days.split("T")[0])
+        .order("date", { ascending: false }),
+
+      // Recent trades
+      supabase
+        .from("analytics_events")
+        .select("*")
+        .eq("event_type", "trade")
+        .gte("timestamp", last24Hours)
+        .order("timestamp", { ascending: false })
+        .limit(50),
+
+      // Active sessions (last hour)
+      supabase
+        .from("app_sessions")
+        .select("*")
+        .gte("started_at", lastHour)
+        .is("ended_at", null),
+    ]);
+
+    // Count events by type
+    const eventCounts: Record<string, number> = {};
+    (last24hEventsResult.data || []).forEach((e: { event_type: string }) => {
+      eventCounts[e.event_type] = (eventCounts[e.event_type] || 0) + 1;
+    });
+
+    // Calculate hourly rate limit distribution
+    const rateLimitsByHour: Record<string, number> = {};
+    (rateLimitEventsResult.data || []).forEach((e: { timestamp: string }) => {
+      const hour = new Date(e.timestamp).toISOString().slice(0, 13);
+      rateLimitsByHour[hour] = (rateLimitsByHour[hour] || 0) + 1;
+    });
+
+    const data = {
+      timestamp: now.toISOString(),
+      overview: {
+        totalUsers: totalUsersResult.count || 0,
+        todaySessions: todaySessionsResult.count || 0,
+        activeNow: activeSessionsResult.data?.length || 0,
+        last24hEvents: last24hEventsResult.data?.length || 0,
+      },
+      eventCounts,
+      rateLimits: {
+        last24h: rateLimitEventsResult.data?.length || 0,
+        byHour: rateLimitsByHour,
+        recent: (rateLimitEventsResult.data || []).slice(0, 10),
+      },
+      errors: {
+        last24h: recentErrorsResult.data?.length || 0,
+        recent: recentErrorsResult.data || [],
+      },
+      trades: {
+        last24h: recentTradesResult.data?.length || 0,
+        recent: (recentTradesResult.data || []).slice(0, 10),
+      },
+      dailyMetrics: dailyMetricsResult.data || [],
+    };
+
+    return new Response(JSON.stringify(data, null, 2), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  }
+}
+
+function getDashboardHTML(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoinDojo - Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; }
+        .card { background: #1e293b; border-radius: 12px; }
+        .stat-value { font-size: 2rem; font-weight: 700; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .status-ok { color: #22c55e; }
+        .status-warn { color: #eab308; }
+        .status-error { color: #ef4444; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">CoinDojo Monitoring</h1>
+                <p class="text-slate-400" id="lastUpdate">Loading...</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="status" class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-green-500 pulse"></span>
+                    <span class="text-green-500">Live</span>
+                </span>
+                <button onclick="refreshData()" class="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition">
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Overview Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">Total Users</p>
+                <p class="stat-value text-white" id="totalUsers">-</p>
+            </div>
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">Today's Sessions</p>
+                <p class="stat-value text-blue-400" id="todaySessions">-</p>
+            </div>
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">Active Now</p>
+                <p class="stat-value text-green-400" id="activeNow">-</p>
+            </div>
+            <div class="card p-6">
+                <p class="text-slate-400 text-sm mb-1">24h Events</p>
+                <p class="stat-value text-purple-400" id="totalEvents">-</p>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Daily Metrics Chart -->
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-4">Daily Active Users (7 days)</h2>
+                <canvas id="dauChart" height="200"></canvas>
+            </div>
+
+            <!-- Event Distribution -->
+            <div class="card p-6">
+                <h2 class="text-xl font-semibold mb-4">Event Distribution (24h)</h2>
+                <canvas id="eventsChart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Rate Limits -->
+            <div class="card p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Rate Limit Events</h2>
+                    <span id="rateLimitCount" class="px-3 py-1 rounded-full text-sm bg-yellow-900 text-yellow-300">-</span>
+                </div>
+                <div id="rateLimitList" class="space-y-2 max-h-64 overflow-y-auto">
+                    <p class="text-slate-500">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Errors -->
+            <div class="card p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Recent Errors</h2>
+                    <span id="errorCount" class="px-3 py-1 rounded-full text-sm bg-red-900 text-red-300">-</span>
+                </div>
+                <div id="errorList" class="space-y-2 max-h-64 overflow-y-auto">
+                    <p class="text-slate-500">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trades Section -->
+        <div class="card p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Recent Trades (24h)</h2>
+                <span id="tradeCount" class="px-3 py-1 rounded-full text-sm bg-green-900 text-green-300">-</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-slate-400 text-sm border-b border-slate-700">
+                            <th class="pb-3">Time</th>
+                            <th class="pb-3">Type</th>
+                            <th class="pb-3">Coin</th>
+                            <th class="pb-3">Amount</th>
+                            <th class="pb-3">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesTable">
+                        <tr><td colspan="5" class="text-slate-500 py-4">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Daily Metrics Table -->
+        <div class="card p-6">
+            <h2 class="text-xl font-semibold mb-4">Daily Metrics</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-slate-400 text-sm border-b border-slate-700">
+                            <th class="pb-3">Date</th>
+                            <th class="pb-3">DAU</th>
+                            <th class="pb-3">New Users</th>
+                            <th class="pb-3">Sessions</th>
+                            <th class="pb-3">Buys</th>
+                            <th class="pb-3">Sells</th>
+                            <th class="pb-3">Volume</th>
+                            <th class="pb-3">Errors</th>
+                            <th class="pb-3">Rate Limits</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metricsTable">
+                        <tr><td colspan="9" class="text-slate-500 py-4">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let dauChart, eventsChart;
+
+        async function refreshData() {
+            try {
+                const response = await fetch(window.location.href + '/api');
+                const data = await response.json();
+                updateDashboard(data);
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                document.getElementById('status').innerHTML =
+                    '<span class="w-3 h-3 rounded-full bg-red-500"></span><span class="text-red-500">Error</span>';
+            }
+        }
+
+        function updateDashboard(data) {
+            // Update timestamp
+            document.getElementById('lastUpdate').textContent =
+                'Last updated: ' + new Date(data.timestamp).toLocaleString();
+
+            // Update overview cards
+            document.getElementById('totalUsers').textContent = data.overview.totalUsers.toLocaleString();
+            document.getElementById('todaySessions').textContent = data.overview.todaySessions.toLocaleString();
+            document.getElementById('activeNow').textContent = data.overview.activeNow.toLocaleString();
+            document.getElementById('totalEvents').textContent = data.overview.last24hEvents.toLocaleString();
+
+            // Update rate limits
+            document.getElementById('rateLimitCount').textContent = data.rateLimits.last24h + ' (24h)';
+            updateRateLimitList(data.rateLimits.recent);
+
+            // Update errors
+            document.getElementById('errorCount').textContent = data.errors.last24h + ' (24h)';
+            updateErrorList(data.errors.recent);
+
+            // Update trades
+            document.getElementById('tradeCount').textContent = data.trades.last24h + ' trades';
+            updateTradesTable(data.trades.recent);
+
+            // Update metrics table
+            updateMetricsTable(data.dailyMetrics);
+
+            // Update charts
+            updateCharts(data);
+        }
+
+        function updateRateLimitList(events) {
+            const list = document.getElementById('rateLimitList');
+            if (!events || events.length === 0) {
+                list.innerHTML = '<p class="text-green-400">No rate limit events in the last 24 hours</p>';
+                return;
+            }
+            list.innerHTML = events.map(e => \`
+                <div class="flex justify-between items-center p-2 bg-slate-800 rounded">
+                    <div>
+                        <span class="text-yellow-400">\${e.api_source || 'Unknown'}</span>
+                        <span class="text-slate-500 text-sm ml-2">\${e.endpoint || ''}</span>
+                    </div>
+                    <span class="text-slate-400 text-sm">\${new Date(e.timestamp).toLocaleTimeString()}</span>
+                </div>
+            \`).join('');
+        }
+
+        function updateErrorList(errors) {
+            const list = document.getElementById('errorList');
+            if (!errors || errors.length === 0) {
+                list.innerHTML = '<p class="text-green-400">No errors in the last 24 hours</p>';
+                return;
+            }
+            list.innerHTML = errors.map(e => \`
+                <div class="p-2 bg-slate-800 rounded">
+                    <div class="flex justify-between items-center">
+                        <span class="text-red-400">\${e.event_name}</span>
+                        <span class="text-slate-400 text-sm">\${new Date(e.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <p class="text-slate-500 text-sm mt-1">\${e.properties?.message || ''}</p>
+                </div>
+            \`).join('');
+        }
+
+        function updateTradesTable(trades) {
+            const table = document.getElementById('tradesTable');
+            if (!trades || trades.length === 0) {
+                table.innerHTML = '<tr><td colspan="5" class="text-slate-500 py-4">No trades in the last 24 hours</td></tr>';
+                return;
+            }
+            table.innerHTML = trades.map(t => \`
+                <tr class="border-b border-slate-700">
+                    <td class="py-2 text-slate-400">\${new Date(t.timestamp).toLocaleTimeString()}</td>
+                    <td class="py-2">
+                        <span class="\${t.event_name.includes('buy') ? 'text-green-400' : 'text-red-400'}">
+                            \${t.event_name.includes('buy') ? 'BUY' : 'SELL'}
+                        </span>
+                    </td>
+                    <td class="py-2">\${t.properties?.coin_symbol || '-'}</td>
+                    <td class="py-2">$\${(t.properties?.amount || 0).toFixed(2)}</td>
+                    <td class="py-2">
+                        <span class="\${t.event_name.includes('success') ? 'text-green-400' : 'text-red-400'}">
+                            \${t.event_name.includes('success') ? 'Success' : 'Failed'}
+                        </span>
+                    </td>
+                </tr>
+            \`).join('');
+        }
+
+        function updateMetricsTable(metrics) {
+            const table = document.getElementById('metricsTable');
+            if (!metrics || metrics.length === 0) {
+                table.innerHTML = '<tr><td colspan="9" class="text-slate-500 py-4">No metrics data yet</td></tr>';
+                return;
+            }
+            table.innerHTML = metrics.map(m => \`
+                <tr class="border-b border-slate-700">
+                    <td class="py-2">\${m.date}</td>
+                    <td class="py-2 text-blue-400">\${m.daily_active_users}</td>
+                    <td class="py-2 text-green-400">\${m.new_users}</td>
+                    <td class="py-2">\${m.total_sessions}</td>
+                    <td class="py-2 text-green-400">\${m.total_buys}</td>
+                    <td class="py-2 text-red-400">\${m.total_sells}</td>
+                    <td class="py-2">$\${parseFloat(m.total_trade_volume || 0).toFixed(0)}</td>
+                    <td class="py-2 \${m.total_errors > 0 ? 'text-red-400' : ''}">\${m.total_errors}</td>
+                    <td class="py-2 \${m.rate_limit_events > 0 ? 'text-yellow-400' : ''}">\${m.rate_limit_events}</td>
+                </tr>
+            \`).join('');
+        }
+
+        function updateCharts(data) {
+            // DAU Chart
+            const dauCtx = document.getElementById('dauChart').getContext('2d');
+            const dauData = (data.dailyMetrics || []).reverse();
+
+            if (dauChart) dauChart.destroy();
+            dauChart = new Chart(dauCtx, {
+                type: 'line',
+                data: {
+                    labels: dauData.map(d => d.date),
+                    datasets: [{
+                        label: 'Daily Active Users',
+                        data: dauData.map(d => d.daily_active_users),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#334155' } },
+                        x: { grid: { color: '#334155' } }
+                    }
+                }
+            });
+
+            // Events Chart
+            const eventsCtx = document.getElementById('eventsChart').getContext('2d');
+            const eventTypes = Object.keys(data.eventCounts || {});
+            const eventValues = Object.values(data.eventCounts || {});
+
+            if (eventsChart) eventsChart.destroy();
+            eventsChart = new Chart(eventsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: eventTypes,
+                    datasets: [{
+                        data: eventValues,
+                        backgroundColor: [
+                            '#3b82f6', '#22c55e', '#eab308', '#ef4444',
+                            '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        // Initial load
+        refreshData();
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>`;
+}

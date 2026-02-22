@@ -345,12 +345,28 @@ class PortfolioViewModel: ObservableObject {
             print("      - Net worth: $\(portfolio.cashBalance + totalHoldingsValue)")
             print("💰 PortfolioViewModel.sell() - END (success)")
 
+            // Track successful sell
+            let profitLoss = (quantity * sellPrice) - (quantity * holding.averageBuyPrice)
+            AnalyticsService.shared.trackSellSuccess(
+                coinSymbol: holding.coinSymbol,
+                quantity: quantity,
+                price: sellPrice,
+                profitLoss: profitLoss
+            )
+
             HapticManager.shared.success()
             return .success
 
         } catch {
             print("❌ PortfolioViewModel: Failed to persist sell transaction - \(error.localizedDescription)")
             print("   Error details: \(error)")
+
+            // Track failed sell
+            AnalyticsService.shared.trackSellFailed(
+                coinSymbol: holding.coinSymbol,
+                quantity: quantity,
+                error: error.localizedDescription
+            )
 
             // Don't update local state - the transaction failed
             HapticManager.shared.error()
