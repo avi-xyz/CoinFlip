@@ -144,6 +144,26 @@ struct ProfileView: View {
                             }
                         }
                     }
+
+                    // Disclaimer
+                    VStack(spacing: Spacing.sm) {
+                        Divider()
+                            .background(Color.textMuted)
+                            .padding(.vertical, Spacing.sm)
+
+                        VStack(spacing: Spacing.xs) {
+                            Text("SIMULATION DISCLAIMER")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.textMuted)
+
+                            Text("CoinDojo is a trading simulator for educational purposes only. No real money or cryptocurrency is involved. All trades are simulated with virtual play money. This is not financial advice.")
+                                .font(.caption)
+                                .foregroundColor(.textMuted)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, Spacing.md)
+                    }
                 }
                 .padding(.horizontal, Spacing.md)
                 .padding(.bottom, Spacing.xxl)

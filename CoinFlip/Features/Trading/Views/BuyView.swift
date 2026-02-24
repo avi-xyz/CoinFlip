@@ -163,6 +163,12 @@ struct BuyView: View {
                             .font(.labelSmall)
                             .foregroundColor(.lossRed)
                     }
+
+                    // Simulation disclaimer
+                    Text("Simulated trade with virtual play money")
+                        .font(.caption)
+                        .foregroundColor(.textMuted)
+                        .padding(.top, Spacing.sm)
                 }
                 .padding(.horizontal, Spacing.md)
                 .padding(.bottom, Spacing.xxl)
